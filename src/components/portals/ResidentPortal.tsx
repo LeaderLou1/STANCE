@@ -1,9 +1,9 @@
 // src/components/portals/ResidentPortal.tsx
 "use client";
 
-import React from "react";
+import React, { useState } from "react"; // Added useState import
 import { StatsHeader } from "@/src/components/StatsHeader";
-import { Users, MapPin, Sparkles, MessageSquare } from "lucide-react";
+import { Users, MapPin, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
 
 const MapLoadingSkeleton = () => (
@@ -22,6 +22,7 @@ const IncidentMap = dynamic(() => import("@/src/components/IncidentMap"), {
 
 interface ResidentPortalProps {
   issues: any[];
+  initiatives?: any[]; // Added optional initiatives array to pass down later
   mapCenter: [number, number];
   stats: { total: number; inProgress: number; resolved: number; rate: number };
   handleUpvote: (id: string) => Promise<void>;
@@ -29,10 +30,16 @@ interface ResidentPortalProps {
 
 export function ResidentPortal({
   issues,
+  initiatives = [], // Defaults to an empty array if not passed yet
   mapCenter,
   stats,
   handleUpvote,
 }: ResidentPortalProps) {
+  // ✅ Hooks must live INSIDE the function component
+  const [activeTab, setActiveTab] = useState<"issues" | "initiatives">(
+    "issues",
+  );
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Premium Public Banner */}
@@ -53,6 +60,30 @@ export function ResidentPortal({
         </div>
       </div>
 
+      {/* 🛠️ Tab Switcher Section */}
+      <div className="flex bg-slate-100 p-1 rounded-xl max-w-xs border border-slate-200">
+        <button
+          onClick={() => setActiveTab("issues")}
+          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+            activeTab === "issues"
+              ? "bg-white text-slate-950 shadow-sm"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Neighborhood Fixes
+        </button>
+        <button
+          onClick={() => setActiveTab("initiatives")}
+          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+            activeTab === "initiatives"
+              ? "bg-white text-slate-950 shadow-sm"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          Community Collabs
+        </button>
+      </div>
+
       {/* Real-time Impact Metrics Block */}
       <StatsHeader stats={stats} />
 
@@ -61,10 +92,14 @@ export function ResidentPortal({
         <div className="flex justify-between items-center mb-4">
           <div>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Live Neighborhood Grid
+              {activeTab === "issues"
+                ? "Live Neighborhood Grid"
+                : "Active Community Initiatives"}
             </h3>
             <p className="text-xs text-slate-500">
-              Tap coordinates to support open community tickets
+              {activeTab === "issues"
+                ? "Tap coordinates to support open community tickets"
+                : "Explore citizen events and neighborhood collaborations"}
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
@@ -72,8 +107,10 @@ export function ResidentPortal({
             Streaming Live Points
           </div>
         </div>
+
+        {/* 🗺️ Dynamically pass the matching dataset based on selected tab */}
         <IncidentMap
-          issues={issues}
+          issues={activeTab === "issues" ? issues : initiatives}
           centerCoordinates={mapCenter}
           onUpvote={handleUpvote}
         />

@@ -27,6 +27,21 @@ export interface WorkOrderWithIssue {
   };
 }
 
+export interface CivicInitiative {
+  id: string;
+  created_at: string;
+  title: string;
+  description: string;
+  category: string;
+  zip_code: string;
+  lat: number | null;
+  lng: number | null;
+  upvotes: number;
+  sponsored_by_id: string | null;
+  event_date?: string;
+  representative?: { name: string; district: string; party: string } | null;
+}
+
 export interface RiskData {
   id: string;
   zip_code: string;
@@ -61,6 +76,10 @@ export default function Home() {
   const [campaignAnalytics, setCampaignAnalytics] = useState<
     IntelligenceData[]
   >([]);
+
+  // 🌟 NEW: Added initiatives state tracker
+  const [initiatives, setInitiatives] = useState<CivicInitiative[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [form, setForm] = useState(defaultForm);
@@ -99,6 +118,21 @@ export default function Home() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🌟 NEW: Added fetch function for community initiatives
+  const fetchInitiatives = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("initiatives")
+        .select("*")
+        .order("upvotes", { ascending: false });
+      if (!error && data) {
+        setInitiatives(data as CivicInitiative[]);
+      }
+    } catch (err) {
+      console.error("Initiative stream loading error:", err);
     }
   };
 
@@ -163,14 +197,40 @@ export default function Home() {
     }
   };
 
+  // 🌟 NEW: Added transactional sponsor handler for representatives
+  const handleSponsorInitiative = async (
+    initiativeId: string,
+    currentRepId: string,
+  ) => {
+    try {
+      const { error } = await supabase
+        .from("initiatives")
+        .update({ sponsored_by_id: currentRepId })
+        .eq("id", initiativeId);
+
+      if (!error) {
+        alert(
+          "🎉 Initiative officially sponsored! Mass notification update dispatched to local district upvoters.",
+        );
+        fetchInitiatives();
+      } else {
+        throw error;
+      }
+    } catch (err) {
+      console.error("Sponsorship transaction halted:", err);
+    }
+  };
+
   useEffect(() => {
     fetchIssues();
+    fetchInitiatives(); // Load initiatives on mount
     fetchWorkOrders();
     fetchRiskAnalytics();
     fetchCampaignIntelligence();
 
+    // Setup listener updates across both tables
     const issueSubscription = supabase
-      .channel("public:issues")
+      .channel("public:civic_changes")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "issues" },
@@ -179,6 +239,13 @@ export default function Home() {
           fetchWorkOrders();
           fetchRiskAnalytics();
           fetchCampaignIntelligence();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "initiatives" },
+        () => {
+          fetchInitiatives();
         },
       )
       .subscribe();
@@ -253,15 +320,13 @@ export default function Home() {
     const contractor = prompt("Enter Contractor Name / Department:");
     if (!contractor) return;
     try {
-      const { error: woError } = await supabase
-        .from("work_orders")
-        .insert([
-          {
-            issue_id: issueId,
-            assigned_contractor: contractor,
-            status: "Dispatched",
-          },
-        ]);
+      const { error: woError } = await supabase.from("work_orders").insert([
+        {
+          issue_id: issueId,
+          assigned_contractor: contractor,
+          status: "Dispatched",
+        },
+      ]);
       if (woError) throw woError;
       await supabase
         .from("issues")
@@ -482,6 +547,7 @@ export default function Home() {
         {currentRole === "resident" && (
           <ResidentPortal
             issues={mapFilteredIssues}
+            initiatives={initiatives} // ✅ Feeds initiatives state array down to the switcher map
             mapCenter={mapCenter}
             stats={stats}
             handleUpvote={handleUpvote}
@@ -489,7 +555,13 @@ export default function Home() {
         )}
 
         {currentRole === "representative" && (
-          <RepresentativePortal campaignAnalytics={campaignAnalytics} />
+          <RepresentativePortal
+            campaignAnalytics={campaignAnalytics}
+            initiatives={initiatives} // ✅ Passed down state data
+            onSponsorInitiative={(id) =>
+              handleSponsorInitiative(id, "mock-rep-id-123")
+            } // ✅ Passed transaction callback with mock ID
+          />
         )}
 
         {currentRole === "admin" && (
