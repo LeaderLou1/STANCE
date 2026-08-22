@@ -1,16 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8f9fa; /* Crisp Light Off-White */
-  --foreground: #212529; /* High-contrast Charcoal */
-  --primary: #0f5132; /* Stance Emerald Pine */
-  --success: #198754; /* Success Metric Green */
-  --muted-accent: #d1e7dd; /* Soft Mint Badge Background */
-  --card: #ffffff; /* Pure White Paper Cards */
+  --background: #f3f1ec;
+  --foreground: #17211d;
+  --primary: #123b2a;
+  --success: #2f7d5b;
+  --muted-accent: #dbe8df;
+  --card: #fffefa;
+  --resident-accent: #d89542;
+  --representative-accent: #2f7d5b;
+  --admin-accent: #263b48;
+  --admin-surface: #e8edef;
 }
 
 body {
   background-color: var(--background);
+  background-image: linear-gradient(rgba(18, 59, 42, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(18, 59, 42, 0.035) 1px, transparent 1px);
+  background-size: 32px 32px;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+}
+
+::selection {
+  background: #e8b86d;
+  color: #17211d;
 }

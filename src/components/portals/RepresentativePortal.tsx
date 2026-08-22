@@ -27,22 +27,22 @@ export function RepresentativePortal({
   onSponsorInitiative,
 }: RepresentativePortalProps) {
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-8 animate-in fade-in duration-300">
       {/* Premium Hub Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 to-emerald-950 text-white rounded-2xl p-6 shadow-sm border border-slate-800">
+      <div className="border-b border-[#a9c8b3] bg-[#e5f0e7] p-6 text-[#17211d] shadow-sm sm:p-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h2 className="text-lg font-bold flex items-center gap-2 tracking-tight">
-              <Megaphone className="w-5 h-5 text-emerald-400" />
-              Elected Official CRM Portal
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-[#2f7d5b]">Representative workspace</p>
+            <h2 className="flex items-center gap-2 text-3xl font-black tracking-[-0.05em]">
+              <Megaphone className="h-7 w-7 text-[#2f7d5b]" />
+              Listen, respond, follow through.
             </h2>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Evaluate hot-button voter concerns, manage local community
-              proposals, and dispatch instant district broadcast loops.
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#496254]">
+              Review verified community signals and coordinate the next public response from one operational workspace.
             </p>
           </div>
-          <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold tracking-wider uppercase text-[10px] px-3 py-1 rounded-full shadow-inner">
-            Precinct Tier Access Enabled
+          <div className="border border-[#a9c8b3] bg-[#fffefa] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#2f7d5b]">
+            Live data workspace
           </div>
         </div>
       </div>

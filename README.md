@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## STANCE
 
-## Getting Started
+STANCE turns local civic reports into a shared, accountable public record for constituents, representatives, and administrators.
 
-First, run the development server:
+### Local setup
 
 ```bash
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Required environment variables:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`SUPABASE_SERVICE_ROLE_KEY` is server-only. Never expose it with a `NEXT_PUBLIC_` prefix.
 
-## Learn More
+### Supabase setup
 
-To learn more about Next.js, take a look at the following resources:
+Run these migrations in order in the Supabase SQL Editor:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. `supabase/migrations/20260821_production_security.sql`
+2. `supabase/migrations/20260822_authorization_moderation.sql`
+3. `supabase/migrations/20260823_auth_profiles.sql`
+4. `supabase/migrations/20260824_district_relationships.sql`
+5. `supabase/migrations/20260825_district_geometry.sql`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Enable Email Auth, configure the site URL and redirect URLs, create the `profiles` table with `resident`, `representative`, and `admin` roles, and configure the private `issue-media` bucket.
 
-## Deploy on Vercel
+Populate `districts` and `district_zip_codes` with official agency boundary data. Assign representatives by setting `profiles.district_id`; residents never self-select a representative role or district.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+See [docs/NYC_DISTRICTS.md](docs/NYC_DISTRICTS.md) for the controlled assignment and verification flow.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+After the migrations, seed official NYC Council boundaries with `npm run seed:districts`. The command requires `NEXT_PUBLIC_SUPABASE_URL` and the server-only `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
+
+### Checks
+
+```bash
+npx tsc --noEmit
+npm run lint
+npm run build -- --webpack
+node --test tests/*.test.mjs
+```
+
+### Product boundaries
+
+Broadcast delivery is disabled until a real notification provider is configured. MIME and size checks are not malware scanning; production deployments must connect an approved scanning service.
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [docs/RUNBOOK.md](docs/RUNBOOK.md), and [docs/PILOT_PLAN.md](docs/PILOT_PLAN.md) before a public launch.

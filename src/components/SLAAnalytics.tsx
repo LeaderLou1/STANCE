@@ -29,7 +29,7 @@ export function SLAAnalytics({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="border border-[#cbd5cc] bg-[#fffefa] p-5 shadow-sm">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
           Average Response SLA
         </h3>
@@ -41,14 +41,14 @@ export function SLAAnalytics({
         </span>
       </div>
 
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="border border-[#cbd5cc] bg-[#fffefa] p-5 shadow-sm">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
           Contractor Fulfillment Rate
         </h3>
         <p className="text-3xl font-black text-slate-900 mt-1">
           {workOrders.length > 0
             ? `${Math.round((completedOrders.length / workOrders.length) * 100)}%`
-            : "100%"}
+            : "N/A"}
         </p>
         <span className="text-[11px] text-slate-500 mt-1 block">
           Total dispatched tickets: {workOrders.length}

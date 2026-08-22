@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { AlertTriangle, TrendingUp, ShieldAlert } from "lucide-react";
 
 interface RiskData {
   county_name?: string; // 🌟 Added relative regional properties
@@ -9,7 +8,7 @@ interface RiskData {
   zip_code: string;
   category: string;
   total_complaints: number;
-  aggregate_community_urgency: number;
+  aggregate_community_urgency: number | null;
   calculated_risk_score: number;
 }
 
@@ -26,9 +25,8 @@ export function PredictiveHotspots({
   return (
     <div className="space-y-6 my-6">
       {/* CATASTROPHIC FAILURE RISK ALERTS */}
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-5">
+      <div className="border border-[#e6b7b0] bg-[#fdf0ed] p-5">
         <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider flex items-center gap-2">
-          <ShieldAlert className="w-5 h-5 text-red-600 animate-pulse" />
           Predictive Maintenance Alert: High Probability Failure Zones
         </h3>
         <p className="text-xs text-red-700 mt-1">
@@ -74,7 +72,7 @@ export function PredictiveHotspots({
       </div>
 
       {/* DISTRICT RISK SCORE TABLE FOR B2B CLIENTS */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+      <div className="border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-sm">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h3 className="text-sm font-extrabold text-gray-900">
@@ -86,7 +84,7 @@ export function PredictiveHotspots({
             </p>
           </div>
           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-            Enterprise Tier Data
+            Data availability varies by deployment
           </span>
         </div>
 
@@ -124,7 +122,7 @@ export function PredictiveHotspots({
                     {row.total_complaints}
                   </td>
                   <td className="py-3 px-3 text-center text-gray-700 font-medium align-middle">
-                    {row.aggregate_community_urgency}
+                    {row.aggregate_community_urgency ?? "N/A"}
                   </td>
                   <td className="py-3 px-3 text-right align-middle">
                     <span

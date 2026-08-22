@@ -24,10 +24,8 @@ interface Comment {
 
 export function DiscussionBoard({
   issueId,
-  currentRole,
 }: {
   issueId: string;
-  currentRole: string;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -54,17 +52,23 @@ export function DiscussionBoard({
   ) => {
     if (!text.trim() && !attachedMediaUrl) return;
 
-    const { error } = await supabase.from("comments").insert([
-      {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) return;
+    const response = await fetch("/api/comments", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sessionData.session.access_token}`,
+      },
+      body: JSON.stringify({
         issue_id: issueId,
         parent_id: parentId,
         content: text,
-        user_role: currentRole,
-        media_url: parentId ? null : attachedMediaUrl, // Attach media to root comments
-      },
-    ]);
+        media_url: parentId ? null : attachedMediaUrl,
+      }),
+    });
 
-    if (!error) {
+    if (response.ok) {
       setNewComment("");
       setAttachedMediaUrl(null);
       setShowUploader(false);
@@ -76,18 +80,20 @@ export function DiscussionBoard({
   // FIXED: Dynamic Upvote Handler
   const handleCommentUpvote = async (
     commentId: string,
-    currentVotes: number,
   ) => {
     try {
-      const { error } = await supabase
-        .from("comments")
-        .update({ upvotes: currentVotes + 1 })
-        .eq("id", commentId);
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) return;
+      const response = await fetch(`/api/comments/${commentId}/vote`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+      });
+      const result = await response.json();
 
-      if (!error) {
+      if (response.ok) {
         setComments((prev) =>
           prev.map((c) =>
-            c.id === commentId ? { ...c, upvotes: currentVotes + 1 } : c,
+            c.id === commentId ? { ...c, upvotes: result.upvotes } : c,
           ),
         );
       }
@@ -197,7 +203,7 @@ export function DiscussionBoard({
                 {/* FIXED: Connected upvote event action logic */}
                 <button
                   onClick={() =>
-                    handleCommentUpvote(comment.id, comment.upvotes)
+                    handleCommentUpvote(comment.id)
                   }
                   className="hover:text-emerald-700 flex items-center gap-1 transition"
                 >

@@ -5,6 +5,23 @@ export type IssueStatus =
   | "Pending Resolution"
   | "Resolved";
 
+export interface ReportForm {
+  title: string;
+  description: string;
+  category: string;
+  zip_code: string;
+  district_id?: string | null;
+  urgency: string;
+  media_url: string;
+}
+
+export interface AddressSuggestion {
+  display_name: string;
+  zip: string;
+  lat?: number;
+  lon?: number;
+}
+
 export interface Profile {
   id: string;
   full_name: string;

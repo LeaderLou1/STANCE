@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { supabase } from "@/src/lib/supabase";
-import { Upload, Film, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Upload, Loader2 } from "lucide-react";
 
 interface MediaUploaderProps {
   onUploadComplete: (url: string) => void;
@@ -12,32 +12,50 @@ export function MediaUploader({ onUploadComplete }: MediaUploaderProps) {
   const [uploading, setUploading] = useState(false);
 
   const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      let uploadedPath: string | null = null;
     try {
       if (!e.target.files || e.target.files.length === 0) return;
       setUploading(true);
 
       const file = e.target.files[0];
-      const fileExt = file.name.split(".").pop();
-      // Generate unique name to prevent cache collision overrides
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `uploads/${fileName}`;
+      if (file.size > 25 * 1024 * 1024) {
+        throw new Error("Media files must be 25MB or smaller.");
+      }
+      if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+        throw new Error("Please choose an image or video file.");
+      }
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) throw new Error("Please sign in before uploading media.");
+
+      const fileExt = file.name.split(".").pop()?.toLowerCase() || "bin";
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
 
       // Upload file directly to Supabase S3 bucket layer
       const { error: uploadError } = await supabase.storage
         .from("issue-media")
-        .upload(filePath, file);
+          .upload(filePath, file, { contentType: file.type, upsert: false });
 
       if (uploadError) throw uploadError;
 
       // Capture public CDN distribution string URL
-      const { data } = supabase.storage
-        .from("issue-media")
-        .getPublicUrl(filePath);
-
-      onUploadComplete(data.publicUrl);
+        uploadedPath = filePath;
+        onUploadComplete(filePath);
     } catch (err) {
+        if (uploadedPath) {
+          await supabase.storage.from("issue-media").remove([uploadedPath]);
+        }
       console.error("Storage Asset upload failed:", err);
-      alert("Failed to process media file upload.");
+      alert(
+        err instanceof Error
+          ? err.message
+          : "Failed to process media file upload.",
+      );
     } finally {
       setUploading(false);
     }

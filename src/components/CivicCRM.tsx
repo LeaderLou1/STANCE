@@ -64,20 +64,17 @@ export function CivicCRM({
     e.preventDefault();
     if (!selectedZip || !broadcastMessage) return;
 
-    alert(
-      `📢 CRM Broadcast dispatched to all constituents in ZIP ${selectedZip} who interacted with this category.\nMessage: "${broadcastMessage}"`,
-    );
     setBroadcastMessage("");
   };
 
   return (
     <div className="space-y-6">
       {/* GLOBAL DROPDOWN ROUTER CONTROL */}
-      <div className="flex justify-end bg-white border border-slate-200/60 p-4 rounded-xl shadow-sm">
+      <div className="flex justify-end border-b border-[#cbd5cc] bg-[#fffefa] p-4 shadow-sm">
         <select
           value={selectedZip}
           onChange={(e) => setSelectedZip(e.target.value)}
-          className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:ring-2 focus:ring-emerald-700 font-medium"
+          className="border border-[#cbd5cc] bg-[#f3f1ec] p-2 text-xs font-bold text-[#365444] outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
         >
           <option value="">All Voting Districts</option>
           {uniqueZips.map((zip) => (
@@ -90,7 +87,7 @@ export function CivicCRM({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* CAMPAIGN INTELLIGENCE METRICS PANEL */}
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div className="lg:col-span-2 border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-sm">
           <div className="mb-6">
             <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-emerald-600" />
@@ -155,15 +152,15 @@ export function CivicCRM({
         </div>
 
         {/* AUTOMATED CONSTITUENT FEEDBACK LOOP PANEL */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+        <div className="flex flex-col justify-between border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-sm">
           <div>
             <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2 mb-1">
               <Megaphone className="w-4 h-4 text-emerald-600" />
-              Constituent Broadcast Loop
+              Constituent Broadcast Draft
             </h3>
             <p className="text-xs text-gray-500 mb-4">
-              Mass-message citizens who upvoted local infrastructure tickets
-              inside specific geographic zones.
+              Prepare an official response for a selected ZIP. Delivery is not
+              configured for this deployment yet.
             </p>
 
             <form onSubmit={handleSendBroadcast} className="space-y-4">
@@ -202,10 +199,10 @@ export function CivicCRM({
 
               <button
                 type="submit"
-                disabled={!selectedZip || !broadcastMessage}
-                className="w-full flex items-center justify-center gap-2 bg-[#0f5132] hover:bg-[#0a3621] disabled:bg-slate-100 disabled:text-slate-400 text-white font-semibold text-xs py-2.5 rounded-xl transition-all shadow-sm"
+                disabled
+                className="w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-400 font-semibold text-xs py-2.5 rounded-xl transition-all cursor-not-allowed"
               >
-                <Send className="w-3.5 h-3.5" /> Dispatch CRM Feedback Broadcast
+                <Send className="w-3.5 h-3.5" /> Delivery not configured
               </button>
             </form>
           </div>
@@ -213,15 +210,15 @@ export function CivicCRM({
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-2 text-[10px] text-slate-400">
             <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>
-              Messages are instantly pushed out via email alerts and localized
-              feed notifications.
+              Connect an approved email or notification provider before enabling
+              delivery.
             </span>
           </div>
         </div>
       </div>
 
       {/* 🌟 NEW: CONSTITUENT INITIATIVE & COLLABORATION HUB */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+      <div className="border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-sm">
         <div className="mb-4">
           <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
             <Star className="w-4 h-4 text-amber-500 fill-amber-500" />

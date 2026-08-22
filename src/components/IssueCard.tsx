@@ -2,7 +2,6 @@ import React from "react";
 import {
   ArrowUp,
   ShieldCheck,
-  AlertCircle,
   Clock,
   CheckCircle2,
   Wrench, // 🌟 New enterprise icon
@@ -32,15 +31,15 @@ export function IssueCard({
   onDispatchWorkOrder, // 🌟 Destructured for premium utility
 }: IssueCardProps) {
   return (
-    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 flex gap-6 hover:shadow-md transition flex-col sm:flex-row">
+    <div className="group flex flex-col gap-5 border border-[#cbd5cc] bg-[#fffefa] p-5 transition hover:-translate-y-0.5 hover:border-[#91aa99] hover:shadow-[0_12px_30px_rgba(23,33,29,0.08)] sm:flex-row sm:p-6">
       {/* UPVOTE COLUMN */}
       <div className="flex sm:flex-col items-center justify-start">
         <button
           onClick={() => onUpvote(issue.id, issue.upvotes)}
-          className="flex flex-col items-center justify-start bg-gray-50 hover:bg-gray-100 border rounded-xl p-3 h-16 w-12 transition group"
+          className="flex h-16 w-12 flex-col items-center justify-start border border-[#cbd5cc] bg-[#f3f1ec] p-3 transition hover:border-[#91aa99] hover:bg-[#e8eee9]"
         >
-          <ArrowUp className="w-4 h-4 text-gray-500 group-hover:text-green-700 group-hover:-translate-y-0.5 transition-all" />
-          <span className="text-sm font-bold text-gray-800 mt-1">
+          <ArrowUp className="h-4 w-4 text-[#647168] transition-all group-hover:-translate-y-0.5 group-hover:text-[#2f7d5b]" />
+          <span className="mt-1 text-sm font-bold text-[#17211d]">
             {issue.upvotes}
           </span>
         </button>
@@ -51,18 +50,18 @@ export function IssueCard({
         <div>
           {/* HEADER TAGS */}
           <div className="flex justify-between items-center">
-            <span className="text-xs font-semibold bg-gray-100 text-gray-700 px-2.5 py-1 rounded-md border">
+            <span className="border border-[#cbd5cc] bg-[#f3f1ec] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#647168]">
               {issue.category}
             </span>
             <span
               className={`text-xs font-bold px-2.5 py-1 rounded-md ${
                 issue.urgency === "Critical Danger"
-                  ? "bg-red-100 text-red-700"
+                  ? "bg-[#f8dfdc] text-[#a33d2f]"
                   : issue.urgency === "High Breakdown"
-                    ? "bg-orange-100 text-orange-700"
+                    ? "bg-[#f8ecd9] text-[#a36327]"
                     : issue.urgency === "Medium Baseline"
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-600"
+                      ? "bg-[#f8ecd9] text-[#a36327]"
+                      : "bg-[#e8eee9] text-[#647168]"
               }`}
             >
               {issue.urgency || "Medium Baseline"}
@@ -72,10 +71,30 @@ export function IssueCard({
           {/* CONTENT FIELD BLOCK */}
           <div className="flex justify-between items-start mt-3">
             <div className="flex-1">
-              <h3 className="font-extrabold text-gray-900 text-lg">
+              <h3 className="text-lg font-black tracking-[-0.025em] text-[#17211d]">
                 {issue.title}
               </h3>
-              <p className="text-sm text-gray-600 mt-1">{issue.description}</p>
+              <p className="mt-1 text-sm leading-6 text-[#647168]">{issue.description}</p>
+
+              {issue.resolution_proof_url && (
+                <div className="mt-3 max-w-md overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                  {issue.resolution_proof_url.match(
+                    /\.(mp4|webm|ogg|mov)(\?.*)?$/i,
+                  ) ? (
+                    <video
+                      src={issue.resolution_proof_url}
+                      controls
+                      className="max-h-72 w-full object-contain"
+                    />
+                  ) : (
+                    <img
+                      src={issue.resolution_proof_url}
+                      alt={`Evidence for ${issue.title}`}
+                      className="max-h-72 w-full object-contain"
+                    />
+                  )}
+                </div>
+              )}
 
               {issue.resolution_notes && (
                 <div className="mt-3 p-3 bg-emerald-50/60 border border-emerald-100 rounded-xl text-xs text-emerald-900">
@@ -88,7 +107,7 @@ export function IssueCard({
             </div>
 
             {/* ACTION INTERACTION BUTTONS */}
-            <div className="flex flex-wrap gap-2 ml-4 justify-end  `max-w-60`">
+            <div className="flex flex-wrap gap-2 ml-4 justify-end max-w-60">
               {/* 🌟 B2B AUTOMATED WORK ORDER DISPATCH BUTTON */}
               {currentRole === "representative" && onDispatchWorkOrder && (
                 <button
@@ -178,7 +197,7 @@ export function IssueCard({
               <>
                 {issue.status === "Submitted" && (
                   <span className="bg-blue-50 text-blue-700 border border-blue-200 font-semibold px-2.5 py-0.5 rounded flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> Submitted
+                    Submitted
                   </span>
                 )}
                 {issue.status === "In Progress" && (
@@ -197,7 +216,7 @@ export function IssueCard({
         </div>
 
         {/* DISCUSSION BOARD LOOP */}
-        <DiscussionBoard issueId={issue.id} currentRole={currentRole} />
+        <DiscussionBoard issueId={issue.id} />
       </div>
     </div>
   );
