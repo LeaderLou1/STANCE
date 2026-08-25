@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServerAdminClient, getBearerToken } from "@/src/lib/serverSupabase";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 interface ReportBody {
   title?: string;
@@ -45,8 +50,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Category and a valid ZIP code are required." }, { status: 400 });
     }
 
+    // Validate coordinates if provided
+    let lat: number | null = null;
+    let lng: number | null = null;
+    if (typeof body.lat === "number" && typeof body.lng === "number") {
+      if (body.lat >= -90 && body.lat <= 90 && body.lng >= -180 && body.lng <= 180) {
+        lat = body.lat;
+        lng = body.lng;
+      } else {
+        return NextResponse.json({ error: "Invalid coordinates provided." }, { status: 400 });
+      }
+    }
+
     const forwardedFor = request.headers.get("x-forwarded-for");
     const ipAddress = forwardedFor?.split(",")[0]?.trim() || "unknown";
+
     const userLimit = await supabase.rpc("consume_report_rate_limit", {
       p_bucket_key: `user:${user.id}`,
       p_limit: 10,
@@ -66,10 +84,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Report limit reached. Please try again later." }, { status: 429 });
     }
 
+    // 1. Generate AI vector embedding for semantic duplicate detection
+    let embeddingJson: string | null = null;
+    try {
+      const embeddingResponse = await openai.embeddings.create({
+        model: "text-embedding-3-small",
+        input: `${title}: ${description}`,
+      });
+      const [{ embedding }] = embeddingResponse.data;
+      embeddingJson = JSON.stringify(embedding);
+    } catch (embeddingErr) {
+      console.error("OpenAI embedding generation failed, falling back:", embeddingErr);
+    }
+
+    // 2. Check for similar/duplicate issues using vectors or fallback
     const { data: similarIssues, error: duplicateError } = await supabase.rpc(
       "find_similar_issues",
-      { p_title: title, p_zip_code: zipCode, p_category: category },
+      { 
+        p_title: title, 
+        p_zip_code: zipCode, 
+        p_category: category,
+        p_embedding: embeddingJson,
+        p_threshold: 0.82,
+        p_limit: 3
+      },
     );
+
     if (duplicateError) {
       console.error("Duplicate check failed:", duplicateError);
       return NextResponse.json({ error: "Duplicate check is temporarily unavailable." }, { status: 503 });
@@ -81,11 +121,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: districtId, error: districtError } = await supabase.rpc(
-      "resolve_district_for_zip",
-      { p_zip_code: zipCode },
-    );
-    if (districtError) throw districtError;
+    // Prefer exact PostGIS spatial resolution if lat/lng available, fallback to ZIP resolution
+    let districtId: string | null = null;
+    if (lat !== null && lng !== null) {
+      const { data: spatialDistrict } = await supabase.rpc("resolve_district_for_point", {
+        p_lat: lat,
+        p_lng: lng,
+      });
+      districtId = spatialDistrict || null;
+    }
+
+    if (!districtId) {
+      const { data: zipDistrict, error: districtError } = await supabase.rpc(
+        "resolve_district_for_zip",
+        { p_zip_code: zipCode },
+      );
+      if (districtError) throw districtError;
+      districtId = zipDistrict || null;
+    }
 
     const { data, error } = await supabase
       .from("issues")
@@ -94,13 +147,14 @@ export async function POST(request: Request) {
         description,
         category,
         zip_code: zipCode,
-        urgency: body.urgency,
+        urgency: body.urgency || "Medium Baseline",
         resolution_proof_url: body.resolution_proof_url || null,
-        lat: body.lat ?? null,
-        lng: body.lng ?? null,
+        lat,
+        lng,
         status: "Submitted",
         reporter_id: user.id,
-        district_id: districtId || null,
+        district_id: districtId,
+        description_embedding: embeddingJson,
       })
       .select("id")
       .single();

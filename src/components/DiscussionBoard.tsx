@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { supabase } from "@/src/lib/supabase";
+import { useEffect, useState } from "react";
 import {
   MessageSquare,
   ThumbsUp,
@@ -9,6 +8,7 @@ import {
   ShieldCheck,
   ImageIcon,
 } from "lucide-react";
+import { supabase } from "@/src/lib/supabase";
 import { MediaUploader } from "./MediaUploader";
 
 interface Comment {
@@ -17,34 +17,70 @@ interface Comment {
   parent_id: string | null;
   user_role: "resident" | "representative" | "admin";
   content: string;
-  media_url?: string;
+  media_url?: string | null;
   upvotes: number;
   created_at: string;
 }
 
-export function DiscussionBoard({
-  issueId,
-}: {
+interface DiscussionBoardProps {
   issueId: string;
-}) {
+}
+
+interface VoteResponse {
+  upvotes?: number;
+}
+
+function DiscussionBoard({ issueId }: DiscussionBoardProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
-  const [attachedMediaUrl, setAttachedMediaUrl] = useState<string | null>(null);
+  const [attachedMediaUrl, setAttachedMediaUrl] =
+    useState<string | null>(null);
   const [showUploader, setShowUploader] = useState(false);
-  const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
+  const [activeReplyId, setActiveReplyId] =
+    useState<string | null>(null);
 
-  const fetchComments = async () => {
-    const { data } = await supabase
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadComments = async () => {
+      const { data, error } = await supabase
+        .from("comments")
+        .select("*")
+        .eq("issue_id", issueId)
+        .order("created_at", { ascending: true });
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Failed to load comments:", error);
+        setComments([]);
+        return;
+      }
+
+      setComments((data as Comment[]) ?? []);
+    };
+
+    void loadComments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [issueId]);
+
+  const refreshComments = async () => {
+    const { data, error } = await supabase
       .from("comments")
       .select("*")
       .eq("issue_id", issueId)
       .order("created_at", { ascending: true });
-    if (data) setComments(data);
-  };
 
-  useEffect(() => {
-    fetchComments();
-  }, [issueId]);
+    if (error) {
+      console.error("Failed to refresh comments:", error);
+      return;
+    }
+
+    setComments((data as Comment[]) ?? []);
+  };
 
   const handleSubmitComment = async (
     parentId: string | null = null,
@@ -52,8 +88,11 @@ export function DiscussionBoard({
   ) => {
     if (!text.trim() && !attachedMediaUrl) return;
 
-    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: sessionData } =
+      await supabase.auth.getSession();
+
     if (!sessionData.session) return;
+
     const response = await fetch("/api/comments", {
       method: "POST",
       headers: {
@@ -68,149 +107,195 @@ export function DiscussionBoard({
       }),
     });
 
-    if (response.ok) {
-      setNewComment("");
-      setAttachedMediaUrl(null);
-      setShowUploader(false);
-      setActiveReplyId(null);
-      await fetchComments();
-    }
+    if (!response.ok) return;
+
+    setNewComment("");
+    setAttachedMediaUrl(null);
+    setShowUploader(false);
+    setActiveReplyId(null);
+
+    await refreshComments();
   };
 
-  // FIXED: Dynamic Upvote Handler
-  const handleCommentUpvote = async (
-    commentId: string,
-  ) => {
+  const handleCommentUpvote = async (commentId: string) => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) return;
-      const response = await fetch(`/api/comments/${commentId}/vote`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
-      });
-      const result = await response.json();
+      const { data: sessionData } =
+        await supabase.auth.getSession();
 
-      if (response.ok) {
-        setComments((prev) =>
-          prev.map((c) =>
-            c.id === commentId ? { ...c, upvotes: result.upvotes } : c,
-          ),
-        );
-      }
-    } catch (err) {
-      console.error("Failed to upvote comment:", err);
+      if (!sessionData.session) return;
+
+      const response = await fetch(
+        `/api/comments/${commentId}/vote`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+        },
+      );
+
+      const result = (await response.json()) as VoteResponse;
+
+      if (!response.ok) return;
+
+      setComments((prev) =>
+        prev.map((comment) =>
+          comment.id === commentId
+            ? {
+                ...comment,
+                upvotes:
+                  typeof result.upvotes === "number"
+                    ? result.upvotes
+                    : comment.upvotes,
+              }
+            : comment,
+        ),
+      );
+    } catch (error) {
+      console.error("Failed to upvote comment:", error);
     }
   };
 
-  const rootComments = comments.filter((c) => !c.parent_id);
+  const rootComments = comments.filter(
+    (comment) => !comment.parent_id,
+  );
+
   const getRepliesFor = (commentId: string) =>
-    comments.filter((c) => c.parent_id === commentId);
+    comments.filter(
+      (comment) => comment.parent_id === commentId,
+    );
 
   return (
-    <div className="mt-4 border-t pt-4 bg-slate-50/50 p-4 rounded-xl">
-      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-        <MessageSquare className="w-3.5 h-3.5" /> Community Discussion Grid
+    <div className="mt-4 rounded-xl border-t bg-slate-50/50 p-4 pt-4">
+      <h3 className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
+        <MessageSquare className="h-3.5 w-3.5" />
+        Community Discussion Grid
       </h3>
 
-      {/* Main Comment Box Layer */}
-      <div className="space-y-2 mb-4">
+      <div className="mb-4 space-y-2">
         <div className="flex gap-2">
           <input
-            className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-emerald-700 outline-none"
+            className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-emerald-700"
             placeholder="Add to the neighborhood discussion..."
             value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
+            onChange={(event) =>
+              setNewComment(event.target.value)
+            }
           />
+
           <button
             type="button"
-            onClick={() => setShowUploader(!showUploader)}
-            className={`p-2 border rounded-lg transition ${showUploader ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-white hover:bg-slate-50 text-slate-400"}`}
+            onClick={() =>
+              setShowUploader((current) => !current)
+            }
+            className={`rounded-lg border p-2 transition ${
+              showUploader
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "bg-white text-slate-400 hover:bg-slate-50"
+            }`}
             title="Attach media"
           >
-            <ImageIcon className="w-4 h-4" />
+            <ImageIcon className="h-4 w-4" />
           </button>
+
           <button
-            onClick={() => handleSubmitComment(null, newComment)}
-            className="bg-emerald-800 hover:bg-emerald-900 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition"
+            type="button"
+            onClick={() =>
+              void handleSubmitComment(null, newComment)
+            }
+            className="rounded-lg bg-emerald-800 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-900"
           >
             Post
           </button>
         </div>
 
-        {/* Media Uploader Attachment Area */}
         {showUploader && (
-          <div className="bg-white p-2 rounded-xl border border-slate-200">
+          <div className="rounded-xl border border-slate-200 bg-white p-2">
             <MediaUploader
-              onUploadComplete={(url) => setAttachedMediaUrl(url)}
+              onUploadComplete={(url) =>
+                setAttachedMediaUrl(url)
+              }
             />
+
             {attachedMediaUrl && (
-              <p className="text-[11px] font-semibold text-emerald-700 mt-1">
-                ✓ Media linked to message wrapper.
+              <p className="mt-1 text-[11px] font-semibold text-emerald-700">
+                ✓ Media linked to message.
               </p>
             )}
           </div>
         )}
       </div>
 
-      {/* Render Comment Tree Pipeline */}
       <div className="space-y-3">
         {rootComments.map((comment) => (
           <div key={comment.id} className="space-y-2">
-            {/* Parent Comment Component */}
-            <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-              <div className="flex items-center justify-between mb-1">
+            <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+              <div className="mb-1 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span
-                    className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
                       comment.user_role === "representative"
-                        ? "bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-0.5"
+                        ? "flex items-center gap-0.5 border border-amber-200 bg-amber-50 text-amber-800"
                         : "bg-slate-100 text-slate-600"
                     }`}
                   >
                     {comment.user_role === "representative" && (
-                      <ShieldCheck className="w-3 h-3 text-amber-700" />
+                      <ShieldCheck className="h-3 w-3 text-amber-700" />
                     )}
+
                     {comment.user_role}
                   </span>
+
                   <span className="text-[10px] text-slate-400">
-                    {new Date(comment.created_at).toLocaleDateString()}
+                    {new Date(
+                      comment.created_at,
+                    ).toLocaleDateString()}
                   </span>
                 </div>
               </div>
 
-              <p className="text-xs text-slate-700">{comment.content}</p>
+              <p className="text-xs text-slate-700">
+                {comment.content}
+              </p>
 
-              {/* Render Attached Proof Inline If Present */}
               {comment.media_url && (
-                <div className="mt-2 max-w-xs rounded-lg overflow-hidden border">
-                  {comment.media_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
+                <div className="mt-2 max-w-xs overflow-hidden rounded-lg border">
+                  {comment.media_url.match(
+                    /\.(mp4|webm|ogg|mov)(\?.*)?$/i,
+                  ) ? (
                     <video
                       src={comment.media_url}
                       controls
-                      className="w-full h-auto max-h-48 object-cover"
+                      className="h-auto max-h-48 w-full object-cover"
                     />
                   ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={comment.media_url}
                       alt="Discussion proof"
-                      className="w-full h-auto max-h-48 object-cover"
+                      className="h-auto max-h-48 w-full object-cover"
                     />
                   )}
                 </div>
               )}
 
               <div className="mt-2 flex items-center gap-3 text-[11px] font-bold text-slate-400">
-                {/* FIXED: Connected upvote event action logic */}
                 <button
+                  type="button"
                   onClick={() =>
-                    handleCommentUpvote(comment.id)
+                    void handleCommentUpvote(comment.id)
                   }
-                  className="hover:text-emerald-700 flex items-center gap-1 transition"
+                  className="flex items-center gap-1 transition hover:text-emerald-700"
                 >
-                  <ThumbsUp className="w-3 h-3" /> {comment.upvotes}
+                  <ThumbsUp className="h-3 w-3" />
+                  {comment.upvotes}
                 </button>
+
                 <button
-                  onClick={() => setActiveReplyId(comment.id)}
+                  type="button"
+                  onClick={() =>
+                    setActiveReplyId(comment.id)
+                  }
                   className="hover:text-slate-600"
                 >
                   Reply
@@ -218,37 +303,49 @@ export function DiscussionBoard({
               </div>
             </div>
 
-            {/* Inline Nested Reply Input Field */}
             {activeReplyId === comment.id && (
-              <div className="flex gap-2 pl-6 items-center">
-                <CornerDownRight className="w-4 h-4 text-slate-300 shrink-0" />
+              <div className="flex items-center gap-2 pl-6">
+                <CornerDownRight className="h-4 w-4 shrink-0 text-slate-300" />
+
                 <input
-                  className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-emerald-700 outline-none"
+                  className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-emerald-700"
                   placeholder="Type your reply..."
                   autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleSubmitComment(comment.id, e.currentTarget.value);
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      void handleSubmitComment(
+                        comment.id,
+                        event.currentTarget.value,
+                      );
                     }
                   }}
                 />
               </div>
             )}
 
-            {/* Sub-replies Render Layout */}
             {getRepliesFor(comment.id).map((reply) => (
-              <div key={reply.id} className="pl-6 flex gap-2">
-                <CornerDownRight className="w-4 h-4 text-slate-300 shrink-0 mt-2" />
-                <div className="bg-slate-50 border p-2.5 rounded-xl flex-1 text-xs">
+              <div
+                key={reply.id}
+                className="flex gap-2 pl-6"
+              >
+                <CornerDownRight className="mt-2 h-4 w-4 shrink-0 text-slate-300" />
+
+                <div className="flex-1 rounded-xl border bg-slate-50 p-2.5 text-xs">
                   <div className="mb-0.5">
-                    <span className="font-bold text-slate-600 text-[10px] uppercase mr-1.5">
+                    <span className="mr-1.5 text-[10px] font-bold uppercase text-slate-600">
                       {reply.user_role}
                     </span>
+
                     <span className="text-[10px] text-slate-400">
-                      {new Date(reply.created_at).toLocaleDateString()}
+                      {new Date(
+                        reply.created_at,
+                      ).toLocaleDateString()}
                     </span>
                   </div>
-                  <p className="text-slate-700">{reply.content}</p>
+
+                  <p className="text-slate-700">
+                    {reply.content}
+                  </p>
                 </div>
               </div>
             ))}
@@ -258,3 +355,5 @@ export function DiscussionBoard({
     </div>
   );
 }
+
+export { DiscussionBoard };

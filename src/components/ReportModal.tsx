@@ -1,11 +1,22 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
 import { MediaUploader } from "./MediaUploader";
-import { AddressSuggestion, ReportForm } from "@/src/types";
+import {
+  AddressSuggestion,
+  IssueUrgency,
+  ReportForm,
+} from "@/src/types";
+import DistrictFeed, {
+  Incident,
+} from "@/src/components/DistrictFeed";
 
 interface ReportModalProps {
   isEditing: boolean;
   form: ReportForm;
-  setForm: React.Dispatch<React.SetStateAction<ReportForm>>;
+  setForm: React.Dispatch<
+    React.SetStateAction<ReportForm>
+  >;
   addressInput: string;
   suggestions: AddressSuggestion[];
   locating: boolean;
@@ -13,7 +24,9 @@ interface ReportModalProps {
   submitting: boolean;
   onAddressSearch: (text: string) => void;
   onUseMyLocation: () => void;
-  onSelectSuggestion: (suggestion: AddressSuggestion) => void;
+  onSelectSuggestion: (
+    suggestion: AddressSuggestion,
+  ) => void;
   onClose: () => void;
   onSubmit: () => void;
 }
@@ -33,13 +46,22 @@ export function ReportModal({
   onClose,
   onSubmit,
 }: ReportModalProps) {
+  const [selectedMatch, setSelectedMatch] =
+    useState<Incident | null>(null);
+
+  const handleSelectIncident = (
+    incident: Incident,
+  ) => {
+    setSelectedMatch(incident);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#17211d]/55 p-4 backdrop-blur-sm">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="report-modal-title"
-        className="max-h-[90vh] w-full max-w-lg space-y-5 overflow-y-auto border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-[0_24px_80px_rgba(23,33,29,0.22)] sm:p-8"
+        className="max-h-[90vh] w-full max-w-2xl space-y-5 overflow-y-auto border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-[0_24px_80px_rgba(23,33,29,0.22)] sm:p-8"
       >
         <h2
           id="report-modal-title"
@@ -52,9 +74,13 @@ export function ReportModal({
 
         {/* ISSUE SUMMARY */}
         <div className="space-y-1">
-          <label htmlFor="issue-title" className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
+          <label
+            htmlFor="issue-title"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
+          >
             Issue Summary
           </label>
+
           <input
             id="issue-title"
             required
@@ -63,15 +89,24 @@ export function ReportModal({
             className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none transition placeholder:text-[#98a49b] focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
             placeholder="e.g., Main Street Pothole causing lane closures"
             value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                title: event.target.value,
+              })
+            }
           />
         </div>
 
         {/* CONTEXT DETAILS */}
         <div className="space-y-1">
-          <label htmlFor="issue-description" className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
+          <label
+            htmlFor="issue-description"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
+          >
             Context Details
           </label>
+
           <textarea
             id="issue-description"
             required
@@ -81,100 +116,205 @@ export function ReportModal({
             className="w-full resize-none border border-[#cbd5cc] bg-white p-3 text-sm leading-6 outline-none transition placeholder:text-[#98a49b] focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
             placeholder="Describe structural danger or urgency dimensions..."
             value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                description: event.target.value,
+              })
+            }
           />
         </div>
 
         {/* ISSUE CATEGORY */}
         <div className="space-y-1">
-          <label htmlFor="issue-category" className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
+          <label
+            htmlFor="issue-category"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
+          >
             Issue Category
           </label>
+
           <select
             className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
             id="issue-category"
             value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                category: event.target.value,
+              })
+            }
           >
-            <option value="Infrastructure">Infrastructure</option>
-            <option value="Roads & Sidewalks">Roads & Sidewalks</option>
-            <option value="Public Safety">Public Safety</option>
-            <option value="Sanitation">Sanitation</option>
+            <option value="Infrastructure">
+              Infrastructure
+            </option>
+            <option value="Roads & Sidewalks">
+              Roads & Sidewalks
+            </option>
+            <option value="Public Safety">
+              Public Safety
+            </option>
+            <option value="Sanitation">
+              Sanitation
+            </option>
             <option value="Transit">Transit</option>
-            <option value="Parks & Recreation">Parks & Recreation</option>
+            <option value="Parks & Recreation">
+              Parks & Recreation
+            </option>
             <option value="Housing">Housing</option>
-            <option value="Environment">Environment</option>
+            <option value="Environment">
+              Environment
+            </option>
             <option value="Other">Other</option>
           </select>
         </div>
 
-        {/* VISUAL EVIDENCE BLOCK */}
+        {/* VISUAL EVIDENCE */}
         <div className="space-y-1">
-          <label htmlFor="incident-location" className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
+          <label
+            htmlFor="incident-location"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
+          >
             Visual Evidence (Optional)
           </label>
+
           <MediaUploader
             onUploadComplete={(url) =>
-              setForm((prev) => ({ ...prev, media_url: url }))
+              setForm((previous) => ({
+                ...previous,
+                media_url: url,
+              }))
             }
           />
+
           {form.media_url && (
-            <p className="text-xs font-semibold text-emerald-700 mt-1">
+            <p className="mt-1 text-xs font-semibold text-emerald-700">
               ✓ Media attached successfully!
             </p>
           )}
         </div>
 
-        {/* INCIDENT LOCATION WITH INTEGRATED AUTOCOMPLETE DROPDOWN */}
-        <div className="space-y-1 relative">
-          <label className="text-xs font-bold text-gray-500 uppercase">
+        {/* INCIDENT LOCATION */}
+        <div className="relative space-y-1">
+          <label
+            htmlFor="incident-location"
+            className="text-xs font-bold uppercase text-gray-500"
+          >
             Incident Location (NYC Only)
           </label>
+
           <div className="flex gap-2">
             <input
               id="incident-location"
               className="min-w-0 flex-1 border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
               placeholder="e.g., 400 Rockaway Ave or Barclays Center"
               value={addressInput}
-              onChange={(e) => onAddressSearch(e.target.value)}
+              onChange={(event) =>
+                onAddressSearch(event.target.value)
+              }
             />
+
             <button
               type="button"
               onClick={onUseMyLocation}
               disabled={locating}
               className="whitespace-nowrap border border-[#cbd5cc] bg-[#f3f1ec] px-3 text-xs font-bold text-[#365444] transition hover:bg-[#e8eee9] disabled:opacity-50"
             >
-              {locating ? "Locating..." : "📍 Locate Me"}
+              {locating
+                ? "Locating..."
+                : "📍 Locate Me"}
             </button>
           </div>
 
-          {/* Cleaned portal anchor frame matching your styles */}
           {suggestions.length > 0 && (
-            <ul className="absolute left-0 right-0 bg-white border border-gray-200 rounded-xl mt-1 shadow-xl z-50 max-h-48 overflow-y-auto divide-y text-xs">
-              {suggestions.map((suggestion, idx) => (
-                <li key={idx}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectSuggestion(suggestion)}
-                    className="w-full text-left p-3 hover:bg-emerald-50/60 font-medium transition duration-150 block truncate text-gray-700"
-                  >
-                    🏢 {suggestion.display_name}{" "}
-                    <span className="text-emerald-700 font-bold ml-1">
-                      ({suggestion.zip})
-                    </span>
-                  </button>
-                </li>
-              ))}
+            <ul className="absolute left-0 right-0 z-50 mt-1 max-h-48 divide-y overflow-y-auto rounded-xl border border-gray-200 bg-white text-xs shadow-xl">
+              {suggestions.map(
+                (suggestion, index) => (
+                  <li key={index}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSelectSuggestion(
+                          suggestion,
+                        )
+                      }
+                      className="block w-full truncate p-3 text-left font-medium text-gray-700 transition duration-150 hover:bg-emerald-50/60"
+                    >
+                      🏢{" "}
+                      {suggestion.display_name}{" "}
+                      <span className="ml-1 font-bold text-emerald-700">
+                        ({suggestion.zip})
+                      </span>
+                    </button>
+                  </li>
+                ),
+              )}
             </ul>
           )}
+        </div>
+
+        {/* 311 FEED */}
+        <div className="space-y-2 border-b border-t border-[#cbd5cc] py-4">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold uppercase text-gray-500">
+              Check Existing 311 Activity
+            </label>
+
+            {selectedMatch && (
+              <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                1 Ticket Selected for Review
+              </span>
+            )}
+          </div>
+
+          {selectedMatch && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
+              <p className="font-bold text-amber-900">
+                Selected Match:{" "}
+                {selectedMatch.complaintType}
+              </p>
+
+              <p className="truncate text-amber-700">
+                {selectedMatch.descriptor ||
+                  "No description"}
+              </p>
+
+              <button
+                type="button"
+                onClick={() =>
+                  alert(
+                    "Upvoted/Linked to existing report!",
+                  )
+                }
+                className="mt-2 rounded bg-amber-600 px-3 py-1 font-medium text-white hover:bg-amber-700"
+              >
+                Upvote Existing Ticket Instead
+              </button>
+            </div>
+          )}
+
+          <div className="max-h-60 overflow-y-auto rounded-lg border border-gray-200">
+            <DistrictFeed
+              defaultZip={
+                form.zip_code || "10001"
+              }
+              onSelectIncident={
+                handleSelectIncident
+              }
+            />
+          </div>
         </div>
 
         {/* LOWER FORM METRICS */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label htmlFor="issue-zip" className="text-xs font-bold text-gray-500 uppercase">
+            <label
+              htmlFor="issue-zip"
+              className="text-xs font-bold uppercase text-gray-500"
+            >
               ZIP Code
             </label>
+
             <input
               id="issue-zip"
               required
@@ -184,31 +324,57 @@ export function ReportModal({
               className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
               placeholder="Enter ZIP or choose a location"
               value={form.zip_code}
-              onChange={(e) =>
-                setForm({ ...form, zip_code: e.target.value.replace(/\D/g, "") })
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  zip_code:
+                    event.target.value.replace(
+                      /\D/g,
+                      "",
+                    ),
+                })
               }
             />
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="issue-urgency" className="text-xs font-bold text-gray-500 uppercase">
+            <label
+              htmlFor="issue-urgency"
+              className="text-xs font-bold uppercase text-gray-500"
+            >
               Severity Priority
             </label>
+
             <select
               className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
               id="issue-urgency"
               value={form.urgency}
-              onChange={(e) => setForm({ ...form, urgency: e.target.value })}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  urgency:
+                    event.target
+                      .value as IssueUrgency,
+                })
+              }
             >
-              <option value="Low Priority">Low Priority</option>
-              <option value="Medium Baseline">Medium Baseline</option>
-              <option value="High Breakdown">High Breakdown</option>
-              <option value="Critical Danger">Critical Danger</option>
+              <option value="Low Priority">
+                Low Priority
+              </option>
+              <option value="Medium Baseline">
+                Medium Baseline
+              </option>
+              <option value="High Breakdown">
+                High Breakdown
+              </option>
+              <option value="Critical Danger">
+                Critical Danger
+              </option>
             </select>
           </div>
         </div>
 
-        {/* SUBMIT ACTION BUTTON TRACKS */}
+        {/* ACTIONS */}
         <div className="flex justify-end gap-3 border-t border-[#cbd5cc] pt-5">
           <button
             type="button"
@@ -217,6 +383,7 @@ export function ReportModal({
           >
             Cancel
           </button>
+
           <button
             type="button"
             onClick={onSubmit}
@@ -230,8 +397,12 @@ export function ReportModal({
                 : "File Complaint"}
           </button>
         </div>
+
         {formError && (
-          <p role="alert" className="text-sm font-semibold text-red-700">
+          <p
+            role="alert"
+            className="text-sm font-semibold text-red-700"
+          >
             {formError}
           </p>
         )}

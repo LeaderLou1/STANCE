@@ -1,292 +1,298 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import {
-  Megaphone,
-  BarChart3,
-  Users,
-  Send,
-  Star,
-  CheckCircle,
-} from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Download, TrendingUp, AlertTriangle, Users, Filter, Sparkles, Award } from "lucide-react";
+import { CivicInitiative } from "@/src/types";
+import { supabase } from "@/src/lib/supabase";
 
 export interface IntelligenceData {
-  zip_code: string;
-  category: string;
-  volume_of_concern: number;
-  aggregate_voter_friction: number;
-  resolution_rate: number;
-}
-
-// Ensure our component recognizes structural initiatives passed down from the parent state
-interface CivicInitiative {
   id: string;
-  title: string;
-  description: string;
-  category: string;
   zip_code: string;
-  upvotes: number;
-  sponsored_by_id: string | null;
+  district_name?: string;
+  aggregate_voter_friction: number;
+  primary_complaint_category: string;
+  total_voter_contacts: number;
+  sentiment_score?: number; // -1.0 (Very Negative) to +1.0 (Positive)
 }
 
-interface CivicCRMProps {
-  analyticsData: IntelligenceData[];
-  initiatives?: CivicInitiative[]; // Passed from page.tsx state stream
-  onSponsorInitiative?: (id: string) => Promise<void>; // Passed from page.tsx transaction handler
+export interface CivicCRMProps {
+  analyticsData?: IntelligenceData[];
+  campaignAnalytics?: IntelligenceData[];
+  initiatives?: CivicInitiative[];
+  onSponsorInitiative?: (id: string) => Promise<void>;
+  onDataChange?: () => void; // Optional callback to trigger parent re-fetch on realtime updates
 }
 
-export function CivicCRM({
+export const CivicCRM: React.FC<CivicCRMProps> = ({
   analyticsData,
+  campaignAnalytics,
   initiatives = [],
   onSponsorInitiative,
-}: CivicCRMProps) {
-  const [selectedZip, setSelectedZip] = useState<string>("");
-  const [broadcastMessage, setBroadcastMessage] = useState<string>("");
+  onDataChange,
+}) => {
+  const [minFriction, setMinFriction] = useState<number>(0);
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [sponsoringId, setSponsoringId] = useState<string | null>(null);
 
-  // Extract distinct ZIP codes for filter dropdown menus
-  const uniqueZips = useMemo(() => {
-    return Array.from(new Set(analyticsData.map((d) => d.zip_code)));
-  }, [analyticsData]);
+  // Setup Supabase Realtime subscription to listen for live updates
+  useEffect(() => {
+    const channel = supabase
+      .channel("civic-crm-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "issues",
+        },
+        (payload) => {
+          console.log("CRM telemetry updated via Realtime:", payload);
+          if (onDataChange) {
+            onDataChange();
+          }
+        }
+      )
+      .subscribe();
 
-  // Filter trends based on selected district vector
-  const districtTrends = useMemo(() => {
-    if (!selectedZip) return analyticsData;
-    return analyticsData.filter((d) => d.zip_code === selectedZip);
-  }, [analyticsData, selectedZip]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [onDataChange]);
 
-  // Filter community initiatives based on the selected district dropdown
-  const filteredInitiatives = useMemo(() => {
-    if (!selectedZip) return initiatives;
-    return initiatives.filter((i) => i.zip_code === selectedZip);
-  }, [initiatives, selectedZip]);
+  // Normalize intelligence dataset with fallback
+  const intelligenceRecords = useMemo(() => {
+    return analyticsData || campaignAnalytics || [];
+  }, [analyticsData, campaignAnalytics]);
 
-  const handleSendBroadcast = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedZip || !broadcastMessage) return;
+  // Extract unique categories
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    intelligenceRecords.forEach((item) => {
+      if (item.primary_complaint_category) set.add(item.primary_complaint_category);
+    });
+    return ["All", ...Array.from(set)];
+  }, [intelligenceRecords]);
 
-    setBroadcastMessage("");
+  // Filter intelligence records based on criteria
+  const filteredAnalytics = useMemo(() => {
+    return intelligenceRecords.filter((item) => {
+      const matchesFriction = item.aggregate_voter_friction >= minFriction;
+      const matchesCat =
+        selectedCategory === "All" || item.primary_complaint_category === selectedCategory;
+      return matchesFriction && matchesCat;
+    });
+  }, [intelligenceRecords, minFriction, selectedCategory]);
+
+  // Derived Campaign CRM Metrics
+  const summaryMetrics = useMemo(() => {
+    const totalContacts = filteredAnalytics.reduce((acc, curr) => acc + (curr.total_voter_contacts || 0), 0);
+    const avgFriction = filteredAnalytics.length
+      ? Math.round(filteredAnalytics.reduce((acc, curr) => acc + curr.aggregate_voter_friction, 0) / filteredAnalytics.length)
+      : 0;
+    const criticalZones = filteredAnalytics.filter((a) => a.aggregate_voter_friction > 70).length;
+
+    return { totalContacts, avgFriction, criticalZones };
+  }, [filteredAnalytics]);
+
+  // One-click CSV Export Functionality
+  const handleExportCSV = () => {
+    if (!filteredAnalytics.length) return;
+
+    const headers = ["ID", "ZIP Code", "District", "Voter Friction Score", "Primary Category", "Voter Contacts", "Sentiment Score"];
+    const rows = filteredAnalytics.map((item) => [
+      item.id,
+      item.zip_code,
+      item.district_name || "N/A",
+      item.aggregate_voter_friction,
+      `"${item.primary_complaint_category}"`,
+      item.total_voter_contacts || 0,
+      item.sentiment_score ?? "N/A",
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `civic_crm_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleSponsorClick = async (id: string) => {
+    if (!onSponsorInitiative) return;
+    setSponsoringId(id);
+    try {
+      await onSponsorInitiative(id);
+    } finally {
+      setSponsoringId(null);
+    }
   };
 
   return (
-    <div className="space-y-6">
-      {/* GLOBAL DROPDOWN ROUTER CONTROL */}
-      <div className="flex justify-end border-b border-[#cbd5cc] bg-[#fffefa] p-4 shadow-sm">
-        <select
-          value={selectedZip}
-          onChange={(e) => setSelectedZip(e.target.value)}
-          className="border border-[#cbd5cc] bg-[#f3f1ec] p-2 text-xs font-bold text-[#365444] outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
+    <div className="space-y-6 rounded-xl border border-[#cbd5cc] bg-[#f3f1ec] p-6 shadow-sm">
+      {/* Header & Export Bar */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-[#123b2a] px-2 py-0.5 text-[10px] font-black uppercase text-white">Representative View</span>
+            <span className="text-xs font-bold text-[#b7732d]">District CRM Engine</span>
+          </div>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-[#17211d]">Campaign Intelligence & Friction Dashboard</h2>
+        </div>
+
+        <button
+          onClick={handleExportCSV}
+          disabled={!filteredAnalytics.length}
+          className="flex items-center justify-center gap-2 rounded-lg bg-[#123b2a] px-4 py-2.5 text-xs font-bold text-white shadow transition hover:bg-[#1e5b3d] disabled:opacity-40"
         >
-          <option value="">All Voting Districts</option>
-          {uniqueZips.map((zip) => (
-            <option key={zip} value={zip}>
-              ZIP Zone: {zip}
-            </option>
-          ))}
-        </select>
+          <Download className="h-4 w-4"/> Export District CSV
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* CAMPAIGN INTELLIGENCE METRICS PANEL */}
-        <div className="lg:col-span-2 border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-sm">
-          <div className="mb-6">
-            <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-emerald-600" />
-              Campaign Intelligence Dashboard
-            </h3>
-            <p className="text-xs text-gray-500">
-              Real-time breakdown of structural voter concerns during election
-              cycles.
-            </p>
+      {/* Overview Stat Widgets */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-lg border border-[#cbd5cc] bg-[#fffefa] p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#647168]">
+            <Users className="h-4 w-4 text-[#2f7d5b]"/> Total Reach Contacts
           </div>
+          <p className="mt-2 text-2xl font-black text-[#17211d]">{summaryMetrics.totalContacts.toLocaleString()}</p>
+        </div>
 
-          <div className="space-y-3">
-            {districtTrends.length === 0 ? (
-              <p className="text-xs text-gray-400 italic text-center py-6">
-                No localized polling metrics available.
-              </p>
+        <div className="rounded-lg border border-[#cbd5cc] bg-[#fffefa] p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#647168]">
+            <TrendingUp className="h-4 w-4 text-[#b7732d]"/> Avg Voter Friction
+          </div>
+          <p className="mt-2 text-2xl font-black text-[#17211d]">{summaryMetrics.avgFriction} / 100</p>
+        </div>
+
+        <div className="rounded-lg border border-[#cbd5cc] bg-[#fffefa] p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#647168]">
+            <AlertTriangle className="h-4 w-4 text-[#b84a39]"/> High-Risk Priority Zones
+          </div>
+          <p className="mt-2 text-2xl font-black text-[#b84a39]">{summaryMetrics.criticalZones}</p>
+        </div>
+      </div>
+
+      {/* Control & Filter Controls */}
+      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-[#cbd5cc] bg-[#e9e7e0] p-4">
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-[#647168]"/>
+          <span className="text-xs font-bold text-[#17211d]">Filters:</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-[#647168]">Min Friction Score:</label>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={minFriction}
+            onChange={(e) => setMinFriction(Number(e.target.value))}
+            className="accent-[#123b2a]"
+          />
+          <span className="text-xs font-bold text-[#17211d]">{minFriction}+</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-[#647168]">Category:</label>
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="rounded border border-[#cbd5cc] bg-white px-2 py-1 text-xs font-medium outline-none focus:border-[#2f7d5b]"
+          >
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Intelligence Data Table */}
+      <div className="overflow-x-auto rounded-lg border border-[#cbd5cc] bg-[#fffefa]">
+        <table className="w-full text-left text-xs">
+          <thead className="border-b border-[#cbd5cc] bg-[#e9e7e0] text-[11px] font-black uppercase text-[#647168]">
+            <tr>
+              <th className="px-4 py-3">ZIP Code</th>
+              <th className="px-4 py-3">Top Category</th>
+              <th className="px-4 py-3 text-center">Friction Score</th>
+              <th className="px-4 py-3 text-center">Voter Contacts</th>
+              <th className="px-4 py-3 text-right">Sentiment Scoring</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#cbd5cc]/60">
+            {filteredAnalytics.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="p-6 text-center text-xs font-semibold text-[#647168]">
+                  No district telemetry matching these parameters.
+                </td>
+              </tr>
             ) : (
-              districtTrends.map((trend, idx) => (
-                <div
-                  key={idx}
-                  className="border border-slate-100 rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 text-xs"
-                >
-                  <div>
-                    <span className="font-bold text-gray-900">
-                      ZIP {trend.zip_code}
-                    </span>
-                    <div className="text-slate-500 mt-0.5">
-                      {trend.category} Core Sector
-                    </div>
-                  </div>
-
-                  <div className="flex gap-6 text-center">
-                    <div>
-                      <span className="block font-bold text-gray-900">
-                        {trend.volume_of_concern}
+              filteredAnalytics.map((item) => {
+                const isHighFriction = item.aggregate_voter_friction >= 70;
+                return (
+                  <tr key={item.id} className="hover:bg-[#f3f1ec]/50">
+                    <td className="px-4 py-3 font-bold text-[#17211d]">{item.zip_code}</td>
+                    <td className="px-4 py-3 text-[#365444]">{item.primary_complaint_category}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span
+                        className={`inline-block rounded px-2 py-0.5 text-[11px] font-bold ${
+                          isHighFriction ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"
+                        }`}
+                      >
+                        {item.aggregate_voter_friction} / 100
                       </span>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                        Tickets
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block font-bold text-amber-600">
-                        {trend.aggregate_voter_friction}
-                      </span>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                        Friction Index
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block font-bold text-emerald-600">
-                        {trend.resolution_rate}%
-                      </span>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                        Resolved
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))
+                    </td>
+                    <td className="px-4 py-3 text-center font-semibold text-[#17211d]">
+                      {item.total_voter_contacts || 0}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium">
+                      <div className="flex items-center justify-end gap-1">
+                        <Sparkles className="h-3 w-3 text-[#b7732d]"/>
+                        <span>
+                          {item.sentiment_score !== undefined
+                            ? `${(item.sentiment_score * 100).toFixed(0)}% Positivity`
+                            : "Baseline Neutral"}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
-          </div>
-        </div>
-
-        {/* AUTOMATED CONSTITUENT FEEDBACK LOOP PANEL */}
-        <div className="flex flex-col justify-between border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-sm">
-          <div>
-            <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2 mb-1">
-              <Megaphone className="w-4 h-4 text-emerald-600" />
-              Constituent Broadcast Draft
-            </h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Prepare an official response for a selected ZIP. Delivery is not
-              configured for this deployment yet.
-            </p>
-
-            <form onSubmit={handleSendBroadcast} className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
-                  Target District
-                </label>
-                <select
-                  required
-                  value={selectedZip}
-                  onChange={(e) => setSelectedZip(e.target.value)}
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-2.5"
-                >
-                  <option value="">Select a ZIP zone to target...</option>
-                  {uniqueZips.map((zip) => (
-                    <option key={zip} value={zip}>
-                      ZIP {zip} Micro-Community
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
-                  Official Response Update
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={broadcastMessage}
-                  onChange={(e) => setBroadcastMessage(e.target.value)}
-                  placeholder='e.g., "Thanks to your community upvotes, crew scheduling for the 4th Ave pothole repair has completed..."'
-                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-2.5 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-800"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled
-                className="w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-400 font-semibold text-xs py-2.5 rounded-xl transition-all cursor-not-allowed"
-              >
-                <Send className="w-3.5 h-3.5" /> Delivery not configured
-              </button>
-            </form>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-2 text-[10px] text-slate-400">
-            <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>
-              Connect an approved email or notification provider before enabling
-              delivery.
-            </span>
-          </div>
-        </div>
+          </tbody>
+        </table>
       </div>
 
-      {/* 🌟 NEW: CONSTITUENT INITIATIVE & COLLABORATION HUB */}
-      <div className="border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-sm">
-        <div className="mb-4">
-          <h3 className="text-sm font-extrabold text-gray-900 flex items-center gap-2">
-            <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-            Constituent Proposals & Collaboration Hub
-          </h3>
-          <p className="text-xs text-gray-500">
-            Review organic, citizen-led community proposals. Sponsor high-upvote
-            initiatives to back them with official district recognition.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredInitiatives.length === 0 ? (
-            <p className="text-xs text-gray-400 italic py-4 col-span-2 text-center">
-              No local community proposals discovered in this district vector.
-            </p>
-          ) : (
-            filteredInitiatives.map((item) => (
-              <div
-                key={item.id}
-                className="border border-slate-100 rounded-xl p-4 flex flex-col justify-between gap-3 bg-slate-50/50"
-              >
-                <div className="text-xs">
-                  <div className="flex justify-between items-start">
-                    <span className="font-extrabold text-gray-900">
-                      {item.title}
-                    </span>
-                    <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-mono text-[10px]">
-                      ZIP {item.zip_code}
-                    </span>
-                  </div>
-                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-bold mt-1 inline-block">
-                    {item.category}
-                  </span>
-                  <p className="text-gray-600 mt-2 line-clamp-2">
-                    {item.description}
-                  </p>
+      {/* Initiatives Section */}
+      {initiatives.length > 0 && (
+        <div className="space-y-3 pt-4 border-t border-[#cbd5cc]">
+          <h3 className="text-sm font-black text-[#17211d]">District Civic Initiatives</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {initiatives.map((init) => (
+              <div key={init.id} className="flex items-center justify-between rounded-lg border border-[#cbd5cc] bg-white p-3 shadow-sm">
+                <div>
+                  <h4 className="font-bold text-xs text-[#17211d]">{init.title}</h4>
+                  <p className="text-[11px] text-[#647168] line-clamp-1">{init.description}</p>
                 </div>
-
-                <div className="flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
-                  <div className="text-gray-400 text-[11px]">
-                    🔥{" "}
-                    <span className="font-bold text-gray-700">
-                      {item.upvotes}
-                    </span>{" "}
-                    community endorsements
-                  </div>
-
-                  {item.sponsored_by_id ? (
-                    <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl font-bold text-[11px]">
-                      <CheckCircle className="w-3.5 h-3.5" /> Endorsed by You
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() =>
-                        onSponsorInitiative && onSponsorInitiative(item.id)
-                      }
-                      className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-xl transition-all text-[11px]"
-                    >
-                      Sponsor Initiative
-                    </button>
-                  )}
-                </div>
+                {onSponsorInitiative && (
+                  <button
+                    onClick={() => handleSponsorClick(init.id)}
+                    disabled={sponsoringId === init.id}
+                    className="flex items-center gap-1 rounded bg-[#123b2a] px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-[#1e5b3d] disabled:opacity-50"
+                  >
+                    <Award className="h-3 w-3"/>
+                    {sponsoringId === init.id ? "Sponsoring..." : "Sponsor"}
+                  </button>
+                )}
               </div>
-            ))
-          )}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
-}
+};

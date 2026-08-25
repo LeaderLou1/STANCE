@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { CivicIssue } from "@/src/types";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -7,14 +8,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase environment variables in .env.local");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-import { CivicIssue, Profile, RepMetrics } from "@/src/types";
-
-// Assuming you already have your client exported somewhere above:
-// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-// const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-// export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Enabled experimental passkey support here:
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    experimental: {
+      passkey: true,
+    },
+  },
+});
 
 /**
  * 1. FETCH ALL CIVIC ISSUES
@@ -70,4 +71,27 @@ export async function updateIssueStatus(
 
   if (error) throw error;
   return data as CivicIssue;
+}
+
+export async function fetchRecent311Data(zipCode: string) {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const isoDate = thirtyDaysAgo.toISOString();
+
+  const baseUrl = "https://data.cityofnewyork.us/resource/erm2-nwe9.json";
+  const queryParams = new URLSearchParams({
+    $where: `incident_zip = '${zipCode}' AND created_date >= '${isoDate}'`,
+    $limit: "50",
+    $order: "created_date DESC"
+  });
+
+  const response = await fetch(`${baseUrl}?${queryParams.toString()}`, {
+    headers: {
+      // App token goes here to prevent rate limiting
+      "X-App-Token": process.env.NEXT_PUBLIC_NYC_APP_TOKEN || ""
+    }
+  });
+
+  const data = await response.json();
+  return data;
 }

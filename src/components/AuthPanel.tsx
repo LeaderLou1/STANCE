@@ -1,152 +1,93 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { User } from "@supabase/supabase-js";
+import { useCallback, useEffect, useState } from "react";
+import type { Session, User } from "@supabase/supabase-js";
+import { KeyRound, LogOut, UserCheck } from "lucide-react";
 import { supabase } from "@/src/lib/supabase";
+import type { UserRole } from "@/src/types";
 
 interface AuthPanelProps {
   onUserChange: (user: User | null) => void;
 }
 
+/** The full sign-in and registration flow lives at /auth. */
 export function AuthPanel({ onUserChange }: AuthPanelProps) {
   const [user, setUser] = useState<User | null>(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [role, setRole] = useState<UserRole>("resident");
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const updateSession = useCallback(
+    async (session: Session | null) => {
+      const nextUser = session?.user ?? null;
+      setUser(nextUser);
+      onUserChange(nextUser);
+
+      if (!nextUser) {
+        setRole("resident");
+        return;
+      }
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", nextUser.id)
+        .maybeSingle();
+
+      setRole(
+        data?.role === "admin" || data?.role === "representative"
+          ? data.role
+          : "resident",
+      );
+    },
+    [onUserChange],
+  );
 
   useEffect(() => {
-    let mounted = true;
-
-    void supabase.auth.getUser().then(({ data }) => {
-      if (mounted) {
-        setUser(data.user);
-        onUserChange(data.user);
-      }
+    void supabase.auth.getSession().then(({ data: { session } }) => updateSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      void updateSession(session);
     });
+    return () => subscription.unsubscribe();
+  }, [updateSession]);
 
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      onUserChange(session?.user ?? null);
-    });
-
-    return () => {
-      mounted = false;
-      data.subscription.unsubscribe();
-    };
-  }, [onUserChange]);
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLoading(true);
-    setMessage("");
-
-    const result = isSignUp
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
-
-    if (result.error) {
-      setMessage(result.error.message);
-    } else if (isSignUp && !result.data.session) {
-      setMessage("Account created. Check your email to confirm your account.");
-    } else {
-      setMessage("Signed in successfully.");
-      setIsOpen(false);
+  const signOut = async () => {
+    setError("");
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) {
+      setError(signOutError.message);
+      return;
     }
-
-    setLoading(false);
+    setIsOpen(false);
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setMessage("");
-  };
-
-  if (user) {
+  if (!user) {
     return (
-      <div className="flex items-center gap-2 text-xs">
-        <span className="max-w-36 truncate text-emerald-100" title={user.email}>
-          {user.email}
-        </span>
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="rounded-md border border-[#9aabb5] px-2 py-1 font-bold text-[#dbe8df] transition hover:bg-[#263b48]"
-        >
-          Sign out
-        </button>
-      </div>
+      <Link href="/auth" className="flex items-center gap-2 rounded-lg border border-[#cbd5cc] bg-[#fffefa] px-3 py-2 text-xs font-bold text-[#17211d] shadow-sm transition hover:bg-[#e9e7e0]">
+        <KeyRound className="h-4 w-4 text-[#b7732d]" />
+        Sign in / Sign up
+      </Link>
     );
   }
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        className="rounded-md border border-[#9aabb5] px-3 py-2 text-xs font-bold text-[#263b48] transition hover:bg-[#e8edef]"
-      >
-        Sign in / Sign up
+      <button type="button" onClick={() => setIsOpen((open) => !open)} className="flex items-center gap-2 rounded-lg border border-[#cbd5cc] bg-[#fffefa] px-3 py-2 text-xs font-bold text-[#17211d] shadow-sm transition hover:bg-[#e9e7e0]">
+        <UserCheck className="h-4 w-4 text-[#2f7d5b]" />
+        <span className="max-w-[120px] truncate">{user.email}</span>
+        <span className="rounded bg-[#123b2a] px-1.5 py-0.5 text-[10px] uppercase text-white">{role}</span>
       </button>
+
       {isOpen && (
-        <form
-          onSubmit={handleSubmit}
-          className="absolute right-0 top-11 z-50 w-72 space-y-3 border border-[#cbd5cc] bg-[#fffefa] p-4 text-[#17211d] shadow-xl"
-        >
-          <h2 className="text-sm font-black">
-            {isSignUp ? "Create your account" : "Sign in to STANCE"}
-          </h2>
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="Email address"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="w-full border border-[#cbd5cc] p-2 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
-          />
-          <input
-            type="password"
-            required
-            minLength={6}
-            autoComplete={isSignUp ? "new-password" : "current-password"}
-            placeholder="Password (6+ characters)"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="w-full border border-[#cbd5cc] p-2 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
-          />
-          {message && (
-            <p role="alert" className="text-xs font-semibold text-slate-700">
-              {message}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#263b48] px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {loading ? "Please wait..." : isSignUp ? "Create account" : "Sign in"}
+        <div className="absolute right-0 top-12 z-50 w-72 rounded-xl border border-[#cbd5cc] bg-[#f3f1ec] p-4 shadow-2xl">
+          <p className="truncate text-sm font-bold text-[#17211d]">{user.email}</p>
+          <p className="mt-1 text-xs font-semibold capitalize text-[#2f7d5b]">Active tier: {role}</p>
+          {error && <p role="alert" className="mt-3 text-xs font-medium text-[#a33d2f]">{error}</p>}
+          <button type="button" onClick={signOut} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#b84a39] py-2 text-xs font-bold text-white transition hover:bg-[#9e3f30]">
+            <LogOut className="h-4 w-4" /> Sign out
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsSignUp((signup) => !signup);
-              setMessage("");
-            }}
-            className="w-full text-xs font-semibold text-emerald-800 hover:underline"
-          >
-            {isSignUp ? "Already have an account? Sign in" : "Need an account? Sign up"}
-          </button>
-          <Link
-            href="/auth"
-            className="block w-full text-center text-xs font-semibold text-[#647168] hover:text-[#2f7d5b] hover:underline"
-          >
-            Open full account page
-          </Link>
-        </form>
+        </div>
       )}
     </div>
   );
