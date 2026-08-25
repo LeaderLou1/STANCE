@@ -63,7 +63,9 @@ export async function POST(request: Request) {
 
     if (!category || !/^\d{5}$/.test(zipCode)) {
       return NextResponse.json(
-        { error: "Category and a valid ZIP code are required." },
+        {
+          error: "Category and a valid ZIP code are required.",
+        },
         { status: 400 }
       );
     }
@@ -138,11 +140,11 @@ export async function POST(request: Request) {
     }
 
     /*
-     * OpenAI embeddings are intentionally disabled for now.
+     * OpenAI embeddings are intentionally disabled.
      *
      * Stance does not require an OpenAI API key to submit reports.
-     * The database duplicate-detection function receives null
-     * and can use its fallback matching logic.
+     * The duplicate-detection function receives null and can use
+     * its fallback matching logic.
      */
     const embeddingJson: string | null = null;
 
@@ -228,6 +230,8 @@ export async function POST(request: Request) {
       districtId = zipDistrict || null;
     }
 
+    console.log("Resolved district:", districtId);
+
     // Insert the issue.
     const { data, error } = await supabase
       .from("issues")
@@ -260,8 +264,13 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Issue API error:", error);
 
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown server error";
+
     return NextResponse.json(
-      { error: "Unable to submit report." },
+      { error: message },
       { status: 500 }
     );
   }
