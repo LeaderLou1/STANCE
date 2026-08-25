@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "seed:districts": "node --env-file=.env.local --experimental-strip-types scripts/seed-districts.ts",
+  "seed:representatives": "node --env-file=.env.local --experimental-strip-types scripts/seed-representatives.ts",
     "start": "next start",
     "lint": "eslint",
     "test": "node --test tests/*.test.mjs"

@@ -94,3 +94,14 @@ export interface CivicInitiative {
   lng?: number | null;
   zip_code?: string;
 }
+
+export interface CouncilOfficial {
+  district: number;
+  name: string;
+  party: string;
+  phone: string;
+  email: string;
+  officeAddress: string;
+  website: string;
+  photoUrl: string;
+}

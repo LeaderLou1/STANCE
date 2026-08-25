@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import DistrictOfficialCard from "./DistrictOfficialCard";
-import { CouncilOfficial } from "@/src/utils/officialsMap";
+import { CouncilOfficial } from "@/src/types";
 
 export interface Incident {
   id: string;

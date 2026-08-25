@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { CouncilOfficial } from "@/src/utils/officialsMap";
+import { CouncilOfficial } from "@/src/types";
 import { Mail, Phone, MapPin, Globe } from "lucide-react";
 
 interface DistrictOfficialCardProps {
