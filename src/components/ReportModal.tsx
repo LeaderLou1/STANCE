@@ -157,15 +157,21 @@ export function ReportModal({
             <option value="Sanitation">
               Sanitation
             </option>
-            <option value="Transit">Transit</option>
+            <option value="Transit">
+              Transit
+            </option>
             <option value="Parks & Recreation">
               Parks & Recreation
             </option>
-            <option value="Housing">Housing</option>
+            <option value="Housing">
+              Housing
+            </option>
             <option value="Environment">
               Environment
             </option>
-            <option value="Other">Other</option>
+            <option value="Other">
+              Other
+            </option>
           </select>
         </div>
 
@@ -240,11 +246,7 @@ export function ReportModal({
                       }
                       className="block w-full truncate p-3 text-left font-medium text-gray-700 transition duration-150 hover:bg-emerald-50/60"
                     >
-                      🏢{" "}
-                      {suggestion.display_name}{" "}
-                      <span className="ml-1 font-bold text-emerald-700">
-                        ({suggestion.zip})
-                      </span>
+                      🏢 {suggestion.display_name}
                     </button>
                   </li>
                 ),
@@ -305,73 +307,41 @@ export function ReportModal({
           </div>
         </div>
 
-        {/* LOWER FORM METRICS */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <label
-              htmlFor="issue-zip"
-              className="text-xs font-bold uppercase text-gray-500"
-            >
-              ZIP Code
-            </label>
+        {/* REPORT METRICS */}
+        <div className="space-y-1">
+          <label
+            htmlFor="issue-urgency"
+            className="text-xs font-bold uppercase text-gray-500"
+          >
+            Severity Priority
+          </label>
 
-            <input
-              id="issue-zip"
-              required
-              inputMode="numeric"
-              maxLength={5}
-              aria-required="true"
-              className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
-              placeholder="Enter ZIP or choose a location"
-              value={form.zip_code}
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  zip_code:
-                    event.target.value.replace(
-                      /\D/g,
-                      "",
-                    ),
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label
-              htmlFor="issue-urgency"
-              className="text-xs font-bold uppercase text-gray-500"
-            >
-              Severity Priority
-            </label>
-
-            <select
-              className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
-              id="issue-urgency"
-              value={form.urgency}
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  urgency:
-                    event.target
-                      .value as IssueUrgency,
-                })
-              }
-            >
-              <option value="Low Priority">
-                Low Priority
-              </option>
-              <option value="Medium Baseline">
-                Medium Baseline
-              </option>
-              <option value="High Breakdown">
-                High Breakdown
-              </option>
-              <option value="Critical Danger">
-                Critical Danger
-              </option>
-            </select>
-          </div>
+          <select
+            className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
+            id="issue-urgency"
+            value={form.urgency}
+            onChange={(event) =>
+              setForm({
+                ...form,
+                urgency:
+                  event.target
+                    .value as IssueUrgency,
+              })
+            }
+          >
+            <option value="Low Priority">
+              Low Priority
+            </option>
+            <option value="Medium Baseline">
+              Medium Baseline
+            </option>
+            <option value="High Breakdown">
+              High Breakdown
+            </option>
+            <option value="Critical Danger">
+              Critical Danger
+            </option>
+          </select>
         </div>
 
         {/* ACTIONS */}
