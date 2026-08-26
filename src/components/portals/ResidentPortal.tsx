@@ -232,7 +232,7 @@ export function ResidentPortal({
 
       <StatsHeader stats={stats} />
 
-      <DistrictFeed defaultZip="11201" />
+      <DistrictFeed />
 
       <div className="flex w-full flex-col border border-[#cbd5cc] bg-[#fffefa] p-5 shadow-sm sm:p-6">
         <div className="mb-4 flex items-center justify-between">

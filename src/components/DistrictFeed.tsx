@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import DistrictOfficialCard from "./DistrictOfficialCard";
 import { CouncilOfficial } from "@/src/types";
 
@@ -20,7 +20,6 @@ export interface Incident {
 }
 
 interface DistrictFeedProps {
-  defaultZip: string;
   onSelectIncident?: (incident: Incident) => void;
 }
 
@@ -33,10 +32,9 @@ interface District311Response {
 }
 
 export default function DistrictFeed({
-  defaultZip,
   onSelectIncident,
 }: DistrictFeedProps) {
-  const [zip, setZip] = useState(defaultZip);
+  const [zip, setZip] = useState("");
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -54,7 +52,8 @@ export default function DistrictFeed({
     setError("");
 
     try {
-      // 1. Fetch NYC 311 incidents for this ZIP.
+      // 1. Fetch NYC 311 incidents.
+      // Coordinate-based lookup will replace the ZIP query in the next step.
       const res311 = await fetch(
         `/api/311?zip=${encodeURIComponent(normalizedZip)}`
       );
@@ -107,27 +106,6 @@ export default function DistrictFeed({
       setLoading(false);
     }
   }, []);
-
-  /*
-   * defaultZip is already used as the initial state.
-   *
-   * The timeout prevents the React set-state-in-effect
-   * lint rule from flagging setZip().
-   */
-  useEffect(() => {
-    if (!defaultZip) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setZip(defaultZip);
-      void fetchDistrictData(defaultZip);
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [defaultZip, fetchDistrictData]);
 
   // Filter incidents by status.
   const filteredIncidents = incidents.filter((item) => {

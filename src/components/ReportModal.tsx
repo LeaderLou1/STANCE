@@ -297,9 +297,6 @@ export function ReportModal({
 
           <div className="max-h-60 overflow-y-auto rounded-lg border border-gray-200">
             <DistrictFeed
-              defaultZip={
-                form.zip_code || "10001"
-              }
               onSelectIncident={
                 handleSelectIncident
               }
