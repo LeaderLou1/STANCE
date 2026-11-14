@@ -9,13 +9,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Enabled experimental passkey support here:
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    experimental: {
-      passkey: true,
-    },
-  },
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
  * 1. FETCH ALL CIVIC ISSUES

@@ -2,6 +2,32 @@
 -- STANCE: Automatic Issue → Representative Assignment
 -- ============================================================
 
+create table if not exists public.representatives (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  district text not null,
+  district_id uuid references public.districts(id) on delete set null,
+  council_member_id text,
+  term_start date,
+  term_end date,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.representatives
+  add column if not exists district_id uuid references public.districts(id) on delete set null,
+  add column if not exists council_member_id text,
+  add column if not exists term_start date,
+  add column if not exists term_end date,
+  add column if not exists updated_at timestamptz not null default now();
+
+alter table public.representatives enable row level security;
+grant select on public.representatives to anon, authenticated;
+drop policy if exists "Public can read representative directory" on public.representatives;
+create policy "Public can read representative directory"
+on public.representatives for select to anon, authenticated
+using (true);
+
 -- One representative per council district.
 -- This prevents ambiguous issue assignment.
 CREATE UNIQUE INDEX IF NOT EXISTS representatives_one_per_district

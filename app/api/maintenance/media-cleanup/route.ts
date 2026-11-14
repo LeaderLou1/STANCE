@@ -3,6 +3,8 @@ import { createServerAdminClient } from "@/src/lib/serverSupabase";
 import crypto from "crypto";
 
 const GRACE_PERIOD_MS = 24 * 60 * 60 * 1000;
+const PAGE_SIZE = 100;
+const DELETE_BATCH_SIZE = 100;
 
 function verifyToken(provided: string | null, expected: string): boolean {
   if (!provided) return false;
@@ -30,34 +32,54 @@ export async function POST(request: Request) {
     if (dbError) throw dbError;
     const activePaths = new Set(activeRows.map((r) => r.storage_path));
 
-    // 2. Paginate top-level directory listing in chunks
-    const { data: files, error: storageError } = await supabase.storage
-      .from("issue-media")
-      .list("", { limit: 100, sortBy: { column: "created_at", order: "asc" } });
+    const bucket = supabase.storage.from("issue-media");
+    const unreferenced: string[] = [];
 
-    if (storageError) throw storageError;
+    const scanFolder = async (folder: string): Promise<void> => {
+      for (let offset = 0; ; offset += PAGE_SIZE) {
+        const { data: entries, error } = await bucket.list(folder, {
+          limit: PAGE_SIZE,
+          offset,
+          sortBy: { column: "created_at", order: "asc" },
+        });
+        if (error) throw error;
+        if (!entries?.length) break;
 
-    const toDelete: string[] = [];
+        for (const entry of entries) {
+          const path = folder ? `${folder}/${entry.name}` : entry.name;
+          const isFolder = entry.id === null && entry.metadata === null;
 
-    for (const file of files ?? []) {
-      const createdAt = file.created_at ? Date.parse(file.created_at) : Date.now();
-      
-      // If file is older than 24h and not in active view, mark for batch removal
-      if (!activePaths.has(file.name) && Date.now() - createdAt > GRACE_PERIOD_MS) {
-        toDelete.push(file.name);
+          if (isFolder) {
+            await scanFolder(path);
+            continue;
+          }
+
+          const createdAt = entry.created_at
+            ? Date.parse(entry.created_at)
+            : Number.NaN;
+          const isOld = Number.isFinite(createdAt)
+            && Date.now() - createdAt > GRACE_PERIOD_MS;
+
+          if (isOld && !activePaths.has(path)) {
+            unreferenced.push(path);
+          }
+        }
+
+        if (entries.length < PAGE_SIZE) break;
       }
+    };
+
+    await scanFolder("");
+
+    let removedCount = 0;
+    for (let index = 0; index < unreferenced.length; index += DELETE_BATCH_SIZE) {
+      const batch = unreferenced.slice(index, index + DELETE_BATCH_SIZE);
+      const { error } = await bucket.remove(batch);
+      if (error) throw error;
+      removedCount += batch.length;
     }
 
-    // 3. Perform a single batch deletion API call (up to 100 files at once)
-    if (toDelete.length > 0) {
-      const { error: removeError } = await supabase.storage
-        .from("issue-media")
-        .remove(toDelete);
-
-      if (removeError) throw removeError;
-    }
-
-    return NextResponse.json({ removed_count: toDelete.length, removed: toDelete });
+    return NextResponse.json({ removed_count: removedCount });
   } catch (error) {
     console.error("Media cleanup failed:", error);
     return NextResponse.json({ error: "Media cleanup failed." }, { status: 500 });

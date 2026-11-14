@@ -1,15 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { MediaUploader } from "./MediaUploader";
 import {
   AddressSuggestion,
   IssueUrgency,
   ReportForm,
 } from "@/src/types";
-import DistrictFeed, {
-  Incident,
-} from "@/src/components/DistrictFeed";
 
 interface ReportModalProps {
   isEditing: boolean;
@@ -46,15 +43,6 @@ export function ReportModal({
   onClose,
   onSubmit,
 }: ReportModalProps) {
-  const [selectedMatch, setSelectedMatch] =
-    useState<Incident | null>(null);
-
-  const handleSelectIncident = (
-    incident: Incident,
-  ) => {
-    setSelectedMatch(incident);
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#17211d]/55 p-4 backdrop-blur-sm">
       <div
@@ -135,8 +123,8 @@ export function ReportModal({
           </label>
 
           <select
-            className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
             id="issue-category"
+            className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
             value={form.category}
             onChange={(event) =>
               setForm({
@@ -148,27 +136,35 @@ export function ReportModal({
             <option value="Infrastructure">
               Infrastructure
             </option>
+
             <option value="Roads & Sidewalks">
               Roads & Sidewalks
             </option>
+
             <option value="Public Safety">
               Public Safety
             </option>
+
             <option value="Sanitation">
               Sanitation
             </option>
+
             <option value="Transit">
               Transit
             </option>
+
             <option value="Parks & Recreation">
               Parks & Recreation
             </option>
+
             <option value="Housing">
               Housing
             </option>
+
             <option value="Environment">
               Environment
             </option>
+
             <option value="Other">
               Other
             </option>
@@ -178,7 +174,7 @@ export function ReportModal({
         {/* VISUAL EVIDENCE */}
         <div className="space-y-1">
           <label
-            htmlFor="incident-location"
+            htmlFor="incident-media"
             className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
           >
             Visual Evidence (Optional)
@@ -204,9 +200,9 @@ export function ReportModal({
         <div className="relative space-y-1">
           <label
             htmlFor="incident-location"
-            className="text-xs font-bold uppercase text-gray-500"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
           >
-            Incident Location (NYC Only)
+            Incident Location
           </label>
 
           <div className="flex gap-2">
@@ -246,7 +242,8 @@ export function ReportModal({
                       }
                       className="block w-full truncate p-3 text-left font-medium text-gray-700 transition duration-150 hover:bg-emerald-50/60"
                     >
-                      🏢 {suggestion.display_name}
+                      📍{" "}
+                      {suggestion.display_name}
                     </button>
                   </li>
                 ),
@@ -255,67 +252,18 @@ export function ReportModal({
           )}
         </div>
 
-        {/* 311 FEED */}
-        <div className="space-y-2 border-b border-t border-[#cbd5cc] py-4">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase text-gray-500">
-              Check Existing 311 Activity
-            </label>
-
-            {selectedMatch && (
-              <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                1 Ticket Selected for Review
-              </span>
-            )}
-          </div>
-
-          {selectedMatch && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs">
-              <p className="font-bold text-amber-900">
-                Selected Match:{" "}
-                {selectedMatch.complaintType}
-              </p>
-
-              <p className="truncate text-amber-700">
-                {selectedMatch.descriptor ||
-                  "No description"}
-              </p>
-
-              <button
-                type="button"
-                onClick={() =>
-                  alert(
-                    "Upvoted/Linked to existing report!",
-                  )
-                }
-                className="mt-2 rounded bg-amber-600 px-3 py-1 font-medium text-white hover:bg-amber-700"
-              >
-                Upvote Existing Ticket Instead
-              </button>
-            </div>
-          )}
-
-          <div className="max-h-60 overflow-y-auto rounded-lg border border-gray-200">
-            <DistrictFeed
-              onSelectIncident={
-                handleSelectIncident
-              }
-            />
-          </div>
-        </div>
-
-        {/* REPORT METRICS */}
+        {/* SEVERITY PRIORITY */}
         <div className="space-y-1">
           <label
             htmlFor="issue-urgency"
-            className="text-xs font-bold uppercase text-gray-500"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
           >
             Severity Priority
           </label>
 
           <select
-            className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
             id="issue-urgency"
+            className="w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
             value={form.urgency}
             onChange={(event) =>
               setForm({
@@ -329,12 +277,15 @@ export function ReportModal({
             <option value="Low Priority">
               Low Priority
             </option>
+
             <option value="Medium Baseline">
               Medium Baseline
             </option>
+
             <option value="High Breakdown">
               High Breakdown
             </option>
+
             <option value="Critical Danger">
               Critical Danger
             </option>

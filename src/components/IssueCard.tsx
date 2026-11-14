@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { UserRole } from "@/src/types";
 import { DiscussionBoard } from "./DiscussionBoard";
+import Image from "next/image";
 
 interface IssueCardIssue {
   id: string;
@@ -114,11 +115,13 @@ export function IssueCard<T extends IssueCardIssue>({
                       className="max-h-72 w-full object-contain"
                     />
                   ) : (
-                    <img
-                      src={issue.resolution_proof_url}
-                      alt={`Evidence for ${issue.title}`}
-                      className="max-h-72 w-full object-contain"
-                    />
+                    <Image
+  src={issue.resolution_proof_url}
+  alt="Resolution evidence"
+  width={800}
+  height={600}
+  className="..."
+/>
                   )}
                 </div>
               )}

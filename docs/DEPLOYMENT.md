@@ -20,10 +20,10 @@ Set `MEDIA_CLEANUP_TOKEN` and schedule `POST /api/maintenance/media-cleanup` fro
 1. Run all migrations in `supabase/migrations` in order.
 2. Enable email authentication and configure confirmation redirects.
 3. Verify `profiles.id` references `auth.users.id`; new accounts default to `resident`, and staff roles are granted only through the admin function.
-4. Import official district boundaries into `districts` and `district_zip_codes`, then assign verified representatives to `profiles.district_id`.
 4. Verify `issue-media` is private and storage policies are present.
-5. Configure backups and test restore before accepting public reports.
-6. Configure rate limits, CAPTCHA, SMTP, and malware scanning.
+5. Import official district boundaries and current representative data, then verify all 51 assignments.
+6. Configure backups and test restore before accepting public reports.
+7. Configure rate limits, CAPTCHA, SMTP, and malware scanning.
 
 ## Release gate
 

@@ -31,9 +31,15 @@ async function seedRepresentatives() {
 
     console.log(`Fetching NYC council members from: ${endpoint}`);
 
-    const response = await fetch(
-      `${endpoint}?$limit=100`,
+    const url = new URL(endpoint);
+    url.searchParams.set("$limit", "200");
+    url.searchParams.set("$order", "term_end DESC");
+    url.searchParams.set(
+      "$where",
+      `term_end >= '${new Date().toISOString().slice(0, 10)}'`,
     );
+
+    const response = await fetch(url);
 
     if (!response.ok) {
       throw new Error(
@@ -44,11 +50,30 @@ async function seedRepresentatives() {
     const members =
       (await response.json()) as NYCMember[];
 
+    const currentByDistrict = new Map<number, NYCMember>();
+    for (const member of members) {
+      const districtNumber = Number(member.district);
+      if (!Number.isInteger(districtNumber) || districtNumber < 1 || districtNumber > 51) {
+        continue;
+      }
+      const existing = currentByDistrict.get(districtNumber);
+      if (!existing || member.term_end > existing.term_end) {
+        currentByDistrict.set(districtNumber, member);
+      }
+    }
+
+    if (currentByDistrict.size !== 51) {
+      throw new Error(
+        `Expected one current member for each of 51 districts; found ${currentByDistrict.size}. Verify the NYC dataset's active-term filter before importing.`,
+      );
+    }
+
     console.log(
-      `Received ${members.length} council member records.`,
+      `Validated current representatives for ${currentByDistrict.size} districts.`,
     );
 
-    for (const member of members) {
+    let updated = 0;
+    for (const member of currentByDistrict.values()) {
       const districtNumber = Number(member.district);
 
       if (!Number.isInteger(districtNumber)) {
@@ -76,10 +101,9 @@ async function seedRepresentatives() {
       }
 
       if (!district) {
-        console.warn(
-          `Skipping ${member.name}: ${districtName} does not exist in Supabase.`,
+        throw new Error(
+          `${districtName} is missing in Supabase. Seed all 51 district boundaries first.`,
         );
-        continue;
       }
 
       // Look for an existing representative linked to this district.
@@ -102,6 +126,9 @@ async function seedRepresentatives() {
         name: member.name,
         district: `NY-${districtNumber}`,
         district_id: district.id,
+        council_member_id: member.council_member_id,
+        term_start: member.term_start || null,
+        term_end: member.term_end || null,
       };
 
       if (existingRepresentative) {
@@ -119,6 +146,7 @@ async function seedRepresentatives() {
         console.log(
           `Updated: ${member.name} → ${districtName}`,
         );
+        updated++;
       } else {
         const { error: insertError } = await supabase
           .from("representatives")
@@ -133,7 +161,12 @@ async function seedRepresentatives() {
         console.log(
           `Inserted: ${member.name} → ${districtName}`,
         );
+        updated++;
       }
+    }
+
+    if (updated !== 51) {
+      throw new Error(`Expected to seed 51 representatives, updated ${updated}.`);
     }
 
     console.log(

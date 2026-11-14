@@ -1,14 +1,15 @@
 # NYC District Data Setup
 
-Run `supabase/migrations/20260825_district_geometry.sql` after the district relationship migration. It enables PostGIS and creates the idempotent `insert_district_geojson` function used by the seeder.
+Run all migrations in filename order, including `20261114000100_fix_production_contracts.sql`. It creates the `upsert_district_boundary` RPC expected by the current seeder, the `representatives` table, spatial district resolver, and media cleanup view.
 
 Then run:
 
 ```bash
 npm run seed:districts
+npm run seed:representatives
 ```
 
-The seeder uses the official NYC Open Data GeoJSON endpoint and the `coundist` field. It imports 51 City Council district geometries and can be run again safely. The command loads `.env.local` and requires `SUPABASE_SERVICE_ROLE_KEY`.
+The seeders use NYC Open Data and require `.env.local` with the server-only `SUPABASE_SERVICE_ROLE_KEY`. They stop if they cannot account for all 51 districts/current representatives. Verify imported data against the published dataset and current term before treating it as authoritative.
 
 Do not invent ZIP mappings for production. Import official NYC boundary or agency assignment data and document the source date.
 

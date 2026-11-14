@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { User } from "@supabase/supabase-js";
+import type { AuthPanelProps } from "../src/components/AuthPanel";
 import { supabase } from "@/src/lib/supabase";
 import {
   AddressSuggestion,
@@ -19,7 +20,6 @@ import {
 import { Plus, Search } from "lucide-react";
 import { IssueCard } from "@/src/components/IssueCard";
 import { ReportModal } from "@/src/components/ReportModal";
-import { DistrictLookupCard } from "@/src/components/DistrictLookUpCard";
 import dynamic from "next/dynamic";
 
 // Portal layers
@@ -30,9 +30,9 @@ import { AdminPortal } from "@/src/components/portals/AdminPortal";
 // Core type from CivicCRM
 import { IntelligenceData } from "@/src/components/CivicCRM";
 
-const AuthPanel = dynamic(
+const AuthPanel = dynamic<AuthPanelProps>(
   () =>
-    import("@/src/components/AuthPanel").then(
+    import("../src/components/AuthPanel").then(
       (mod) => mod.AuthPanel
     ),
   {
@@ -189,6 +189,15 @@ function getErrorMessage(error: unknown): string {
 
   if (typeof error === "string") {
     return error;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
   }
 
   return "An unexpected error occurred.";
@@ -1199,17 +1208,20 @@ export default function Home() {
           isEditing &&
           activeEditId
         ) {
-          const { error } =
-            await supabase
-              .from("issues")
-              .update(payload)
-              .eq(
-                "id",
-                activeEditId
-              );
-
-          if (error) {
-            throw error;
+          const response = await fetch(
+            `/api/issues/${activeEditId}`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify(payload),
+            },
+          );
+          const result: { error?: string } = await response.json();
+          if (!response.ok) {
+            throw new Error(result.error || "Unable to update report.");
           }
         } else {
           const response =
@@ -1429,7 +1441,7 @@ export default function Home() {
           </div>
         )}
 
-        <DistrictLookupCard />
+    
 
         {currentRole === "resident" && (
           <ResidentPortal

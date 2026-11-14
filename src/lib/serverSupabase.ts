@@ -11,6 +11,20 @@ export function createServerAdminClient() {
   });
 }
 
+export function createServerUserClient(accessToken: string) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    throw new Error("Missing public Supabase configuration.");
+  }
+  return createClient(url, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  });
+}
+
 export function getBearerToken(request: Request) {
   const value = request.headers.get("authorization");
   return value?.replace(/^Bearer\s+/i, "") || null;

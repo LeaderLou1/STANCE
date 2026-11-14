@@ -13,6 +13,8 @@ interface UpdateBody {
   urgency?: string;
   status?: string;
   resolution_notes?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 async function authenticate(request: Request) {
@@ -23,7 +25,7 @@ async function authenticate(request: Request) {
   if (!authData.user) return { supabase, user: null, profile: null };
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, district_id")
     .eq("id", authData.user.id)
     .maybeSingle();
   return { supabase, user: authData.user, profile };
@@ -37,20 +39,46 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const { data: issue } = await supabase
       .from("issues")
-      .select("reporter_id, moderation_status")
+      .select("reporter_id, moderation_status, district_id")
       .eq("id", id)
       .maybeSingle();
     if (!issue) return NextResponse.json({ error: "Report not found." }, { status: 404 });
 
-    const staff = profile?.role === "representative" || profile?.role === "admin";
-    if (!staff && (issue.reporter_id !== user.id || issue.moderation_status !== "Pending Review")) {
+    const isAdmin = profile?.role === "admin";
+    const isRepresentative = profile?.role === "representative";
+    const isOwner = issue.reporter_id === user.id;
+    const assignedRepresentative =
+      isRepresentative &&
+      profile?.district_id &&
+      profile.district_id === issue.district_id;
+
+    if (
+      isRepresentative && !assignedRepresentative ||
+      !isAdmin && !assignedRepresentative &&
+        (!isOwner || issue.moderation_status !== "Pending Review")
+    ) {
       return NextResponse.json({ error: "You cannot edit this report." }, { status: 403 });
     }
 
     const body = (await request.json()) as UpdateBody;
-    const update: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
+    const staff = Boolean(isAdmin || assignedRepresentative);
+    if (
+      assignedRepresentative &&
+      !isAdmin &&
+      (body.title !== undefined ||
+        body.description !== undefined ||
+        body.category !== undefined ||
+        body.zip_code !== undefined ||
+        body.urgency !== undefined ||
+        body.lat !== undefined ||
+        body.lng !== undefined)
+    ) {
+      return NextResponse.json(
+        { error: "Representatives may update status and official notes only." },
+        { status: 403 },
+      );
+    }
+    const update: Record<string, unknown> = {};
 
     if (typeof body.title === "string") {
       const title = body.title.trim();
@@ -83,21 +111,68 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     if (typeof body.urgency === "string") {
+      if (!(["Low Priority", "Medium Baseline", "High Breakdown", "Critical Danger"] as const).includes(body.urgency as never)) {
+        return NextResponse.json({ error: "Invalid urgency value." }, { status: 400 });
+      }
       update.urgency = body.urgency;
     }
 
     if (staff) {
-      if (typeof body.status === "string") update.status = body.status;
+      if (typeof body.status === "string") {
+        if (!(["Submitted", "In Progress", "Pending Resolution", "Resolved"] as const).includes(body.status as never)) {
+          return NextResponse.json({ error: "Invalid issue status." }, { status: 400 });
+        }
+        update.status = body.status;
+      }
       if (body.resolution_notes !== undefined) {
         update.resolution_notes = typeof body.resolution_notes === "string" 
           ? body.resolution_notes.trim() || null 
           : null;
       }
+    } else if (body.status !== undefined || body.resolution_notes !== undefined) {
+      return NextResponse.json({ error: "Only assigned staff may update report status or official notes." }, { status: 403 });
     }
 
-    if (Object.keys(update).length === 1) {
+    if (typeof body.lat === "number" || typeof body.lng === "number" || typeof body.zip_code === "string") {
+      const lat = typeof body.lat === "number" ? body.lat : null;
+      const lng = typeof body.lng === "number" ? body.lng : null;
+      let districtId: string | null = null;
+
+      if (lat !== null && lng !== null) {
+        if (lat < 40.4 || lat > 41 || lng < -74.3 || lng > -73.6) {
+          return NextResponse.json({ error: "Location must be within NYC." }, { status: 400 });
+        }
+        const { data, error } = await supabase.rpc("resolve_district_for_point", {
+          p_lat: lat,
+          p_lng: lng,
+        });
+        if (error) throw error;
+        districtId = data ?? null;
+        update.lat = lat;
+        update.lng = lng;
+      }
+
+      const zipCode = typeof body.zip_code === "string" ? body.zip_code.trim() : undefined;
+      if (zipCode !== undefined) {
+        if (!/^\d{5}$/.test(zipCode)) {
+          return NextResponse.json({ error: "A valid 5-digit ZIP code is required." }, { status: 400 });
+        }
+        update.zip_code = zipCode;
+        if (!districtId) {
+          const { data, error } = await supabase.rpc("resolve_district_for_zip", {
+            p_zip_code: zipCode,
+          });
+          if (error) throw error;
+          districtId = data ?? null;
+        }
+      }
+      update.district_id = districtId;
+    }
+
+    if (Object.keys(update).length === 0) {
       return NextResponse.json({ error: "No valid fields provided for update." }, { status: 400 });
     }
+    update.updated_at = new Date().toISOString();
 
     const { error } = await supabase.from("issues").update(update).eq("id", id);
     if (error) throw error;
@@ -123,10 +198,13 @@ export async function DELETE(request: Request, context: RouteContext) {
     const { supabase, user, profile } = await authenticate(request);
     if (!supabase || !user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
-    const { data: issue } = await supabase.from("issues").select("reporter_id").eq("id", id).maybeSingle();
+    const { data: issue } = await supabase.from("issues").select("reporter_id, moderation_status").eq("id", id).maybeSingle();
     if (!issue) return NextResponse.json({ error: "Report not found." }, { status: 404 });
 
-    if (issue.reporter_id !== user.id && profile?.role !== "admin") {
+    const canDelete =
+      profile?.role === "admin" ||
+      (issue.reporter_id === user.id && issue.moderation_status === "Pending Review");
+    if (!canDelete) {
       return NextResponse.json({ error: "You cannot delete this report." }, { status: 403 });
     }
 

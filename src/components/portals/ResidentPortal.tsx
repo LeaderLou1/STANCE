@@ -3,7 +3,6 @@
 import React, { useMemo, useState } from "react";
 import { CivicIssue } from "@/src/types";
 import { StatsHeader } from "@/src/components/StatsHeader";
-import DistrictFeed from "@/src/components/DistrictFeed";
 import {
   Users,
   MapPin,
@@ -232,7 +231,7 @@ export function ResidentPortal({
 
       <StatsHeader stats={stats} />
 
-      <DistrictFeed />
+      
 
       <div className="flex w-full flex-col border border-[#cbd5cc] bg-[#fffefa] p-5 shadow-sm sm:p-6">
         <div className="mb-4 flex items-center justify-between">

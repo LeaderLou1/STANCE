@@ -37,6 +37,7 @@ export default function AuthPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [canResendConfirmation, setCanResendConfirmation] = useState(false);
 
   const hash = useSyncExternalStore(
     subscribeToHash,
@@ -65,7 +66,9 @@ export default function AuthPage() {
     setLoading(true);
     setError("");
     setMessage("");
+    setCanResendConfirmation(false);
 
+    try {
     if (mode === "update-password") {
       const { error: updateError } = await supabase.auth.updateUser({
         password,
@@ -83,7 +86,6 @@ export default function AuthPage() {
         }, 2000);
       }
 
-      setLoading(false);
       return;
     }
 
@@ -101,7 +103,6 @@ export default function AuthPage() {
         );
       }
 
-      setLoading(false);
       return;
     }
 
@@ -125,15 +126,28 @@ export default function AuthPage() {
 
     if (result.error) {
       setError(result.error.message);
+      setCanResendConfirmation(
+        mode === "signin" &&
+          /email not confirmed|confirm your email/i.test(result.error.message)
+      );
     } else if (mode === "signup" && !result.data.session) {
       setMessage(
         "Account created. Check your email to confirm your account."
       );
+      setCanResendConfirmation(true);
     } else {
       window.location.href = "/";
     }
 
-    setLoading(false);
+    } catch (authError) {
+      setError(
+        authError instanceof Error
+          ? `Could not reach Supabase Auth: ${authError.message}`
+          : "Could not reach Supabase Auth. Check your connection and try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isSignup = mode === "signup";
@@ -144,6 +158,51 @@ export default function AuthPage() {
     setSelectedMode(nextMode);
     setError("");
     setMessage("");
+    setCanResendConfirmation(false);
+  };
+
+  const resendConfirmation = async () => {
+    if (!email.trim()) {
+      setError("Enter your email address first.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const { error: resendError } = await supabase.auth.resend({
+        type: "signup",
+        email: email.trim(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth`,
+        },
+      });
+      if (resendError) throw resendError;
+      setMessage("If confirmation is still required, a new link has been sent.");
+    } catch (resendError) {
+      setError(
+        resendError instanceof Error
+          ? resendError.message
+          : "Could not resend the confirmation email. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearLocalSession = async () => {
+    setLoading(true);
+    setError("");
+    const { error: signOutError } = await supabase.auth.signOut({
+      scope: "local",
+    });
+    if (signOutError) {
+      setError(signOutError.message);
+    } else {
+      setMessage("Saved session cleared. Sign in again with your account.");
+    }
+    setLoading(false);
   };
 
   return (
@@ -282,12 +341,19 @@ export default function AuthPage() {
             )}
 
             {error && (
-              <p
-                role="alert"
-                className="border border-[#e6b7b0] bg-[#fdf0ed] p-3 text-sm font-semibold text-[#a33d2f]"
-              >
-                {error}
-              </p>
+              <div role="alert" className="border border-[#e6b7b0] bg-[#fdf0ed] p-3 text-sm font-semibold text-[#a33d2f]">
+                <p>{error}</p>
+                {!isSignup && !isReset && !isUpdatePassword && (
+                  <button
+                    type="button"
+                    onClick={clearLocalSession}
+                    disabled={loading}
+                    className="mt-2 text-left text-xs font-bold underline"
+                  >
+                    Clear this browser&apos;s saved session and retry
+                  </button>
+                )}
+              </div>
             )}
 
             {displayMessage && (
@@ -297,6 +363,17 @@ export default function AuthPage() {
               >
                 {displayMessage}
               </p>
+            )}
+
+            {canResendConfirmation && (
+              <button
+                type="button"
+                onClick={resendConfirmation}
+                disabled={loading}
+                className="w-full border border-[#2f7d5b] px-4 py-2.5 text-sm font-bold text-[#2f7d5b] transition hover:bg-[#e5f0e7] disabled:opacity-50"
+              >
+                Resend confirmation email
+              </button>
             )}
 
             <button

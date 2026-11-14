@@ -19,7 +19,14 @@ test("security migrations define ownership and moderation controls", () => {
   assert.match(read("supabase/migrations/20260824_district_relationships.sql"), /assign_representative_to_district/);
   assert.match(read("supabase/migrations/20260824_district_relationships.sql"), /p\.role = 'representative'/);
   assert.match(read("supabase/migrations/20260825_district_geometry.sql"), /postgis/);
-  assert.match(read("scripts/seed-districts.ts"), /props\.coundist/);
+  assert.match(read("scripts/seed-districts.ts"), /properties\.coundist/);
+  const repairSql = read("supabase/migrations/20261114000100_fix_production_contracts.sql");
+  assert.match(repairSql, /find_similar_issues_v2/);
+  assert.match(repairSql, /resolve_district_for_point/);
+  assert.match(repairSql, /upsert_district_boundary/);
+  assert.match(repairSql, /active_media_paths/);
+  assert.match(repairSql, /actor_role is null or actor_role not in/);
+  assert.match(repairSql, /p\.district_id = issues\.district_id/);
 });
 
 test("mutations have server boundaries", () => {
@@ -29,6 +36,8 @@ test("mutations have server boundaries", () => {
   assert.match(read("app/api/comments/route.ts"), /reporter_id/);
   assert.match(read("app/api/issues/[id]/vote/route.ts"), /vote_for_issue/);
   assert.match(read("app/api/moderation/issues/[id]/route.ts"), /moderate_issue/);
+  assert.match(read("app/api/issues/[id]/vote/route.ts"), /createServerUserClient/);
+  assert.match(read("app/api/moderation/issues/[id]/route.ts"), /createServerUserClient/);
   assert.match(read("app/api/health/route.ts"), /latency_ms/);
   assert.match(read("app/auth/page.tsx"), /resetPasswordForEmail/);
 });
