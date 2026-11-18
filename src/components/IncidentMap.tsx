@@ -22,6 +22,7 @@ export interface MapIssue {
   upvotes?: number | null;
   lat?: number | null;
   lng?: number | null;
+  urgency?: "high" | "normal" | string | null;
 }
 
 interface IncidentMapProps {
@@ -54,31 +55,33 @@ if (typeof window !== "undefined") {
   });
 }
 
-const customPinIcon =
-  typeof window !== "undefined"
-    ? new L.DivIcon({
-        html: `
-          <div class="flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              class="w-8 h-8 text-emerald-700 drop-shadow-md"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742c1.005-.717 2.186-1.64 3.124-2.677c1.865-2.055 3.28-4.745 3.28-7.922c0-5.122-4.18-9-9.158-9C6.819 2 2.64 5.878 2.64 11c0 3.177 1.415 5.867 3.28 7.921c.938 1.038 2.119 1.96 3.125 2.677c.443.315.83.57 1.144.742zM12 13.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"
-                clip-rule="evenodd"
-              />
-            </svg>
-          </div>
-        `,
-        className: "custom-pinpoint-wrapper",
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32],
-      })
-    : undefined;
+// Dynamic Icon Generator for Standard vs High-Urgency Pulsing Pins
+const createPinIcon = (isUrgent: boolean) => {
+  if (typeof window === "undefined") return undefined;
+
+  return new L.DivIcon({
+    html: `
+      <div class="relative flex items-center justify-center group">
+        ${
+          isUrgent
+            ? `<div class="absolute w-10 h-10 rounded-full bg-red-500/30 animate-ping"></div>`
+            : `<div class="absolute w-8 h-8 rounded-full bg-emerald-500/20 animate-pulse"></div>`
+        }
+        <div class="relative z-10 flex items-center justify-center w-8 h-8 rounded-full ${
+          isUrgent ? "bg-red-600 text-white" : "bg-emerald-600 text-white"
+        } shadow-lg transition-transform duration-200 ease-out group-hover:scale-110">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
+            <path fill-rule="evenodd" d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742c1.005-.717 2.186-1.64 3.124-2.677c1.865-2.055 3.28-4.745 3.28-7.922c0-5.122-4.18-9-9.158-9C6.819 2 2.64 5.878 2.64 11c0 3.177 1.415 5.867 3.28 7.921c.938 1.038 2.119 1.96 3.125 2.677c.443.315.83.57 1.144.742zM12 13.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" clip-rule="evenodd" />
+          </svg>
+        </div>
+      </div>
+    `,
+    className: "custom-pinpoint-wrapper",
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -22],
+  });
+};
 
 function ChangeMapView({
   center,
@@ -88,7 +91,7 @@ function ChangeMapView({
   const map = useMap();
 
   useEffect(() => {
-    map.setView(center, map.getZoom());
+    map.setView(center, map.getZoom(), { animate: true });
   }, [center, map]);
 
   return null;
@@ -181,63 +184,80 @@ export default function IncidentMap({
   );
 
   return (
-    <div className="relative z-10 h-87.5 w-full overflow-hidden rounded-2xl border border-slate-200/80 shadow-md">
+    <div className="relative z-10 h-96 w-full overflow-hidden rounded-2xl border border-neutral-200/80 shadow-xl transition-all duration-300">
       <MapContainer
         center={mapCenter}
-        zoom={12}
+        zoom={13}
         scrollWheelZoom={false}
         className="h-full w-full"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
 
         <ChangeMapView center={mapCenter} />
 
-        {locatedIssues.map((issue) => (
-          <Marker
-            key={issue.id}
-            position={[
-              issue.lat as number,
-              issue.lng as number,
-            ]}
-            icon={customPinIcon}
-          >
-            <Popup maxWidth={320} minWidth={240}>
-              <div className="p-1">
-                <span className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800">
-                  {issue.category || "Issue"}
-                </span>
+        {locatedIssues.map((issue) => {
+          const isUrgent =
+            issue.urgency === "high" || (issue.upvotes ?? 0) > 15;
+          const pinIcon = createPinIcon(isUrgent);
 
-                <h4 className="mt-1.5 text-sm font-extrabold leading-tight text-gray-900">
-                  {issue.title || "Community Issue"}
-                </h4>
+          return (
+            <Marker
+              key={issue.id}
+              position={[
+                issue.lat as number,
+                issue.lng as number,
+              ]}
+              icon={pinIcon}
+            >
+              <Popup maxWidth={320} minWidth={240} className="rounded-xl shadow-2xl">
+                <div className="p-2">
+                  <div className="flex items-center justify-between">
+                    <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      isUrgent 
+                        ? "border border-red-200 bg-red-50 text-red-700" 
+                        : "border border-emerald-200 bg-emerald-50 text-emerald-800"
+                    }`}>
+                      {issue.category || "Community Issue"}
+                    </span>
+                    {isUrgent && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 animate-pulse">
+                        ● HIGH PRIORITY
+                      </span>
+                    )}
+                  </div>
 
-                <p className="mt-1.5 max-h-36 overflow-y-auto whitespace-pre-wrap pr-1 text-xs text-gray-600">
-                  {issue.description ||
-                    "No description provided."}
-                </p>
+                  <h4 className="mt-2 text-sm font-extrabold leading-tight text-neutral-900">
+                    {issue.title || "Untitled Incident"}
+                  </h4>
 
-                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] font-semibold text-gray-700">
-                  <span>
-                    Council District {issue.council_district ?? "unresolved"}
-                  </span>
+                  <p className="mt-1.5 max-h-32 overflow-y-auto whitespace-pre-wrap pr-1 text-xs text-neutral-600 leading-relaxed">
+                    {issue.description ||
+                      "No description provided for this report."}
+                  </p>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onUpvote?.(issue.id)
-                    }
-                    className="flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 font-bold text-emerald-700 transition hover:bg-emerald-100 active:scale-95"
-                  >
-                    ▲ {issue.upvotes || 0} votes
-                  </button>
+                  <div className="mt-3 flex items-center justify-between border-t border-neutral-100 pt-2 text-[11px] font-semibold text-neutral-700">
+                    <span className="text-neutral-500">
+                      District {issue.council_district ?? "NYC"}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onUpvote?.(issue.id)
+                      }
+                      className="flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 font-bold text-emerald-700 transition-all hover:bg-emerald-100 active:scale-95 shadow-sm"
+                    >
+                      ▲ {issue.upvotes || 0}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+              </Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
     </div>
   );
