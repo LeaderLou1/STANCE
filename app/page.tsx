@@ -101,8 +101,9 @@ type IssueWithRep = CivicIssue & {
 type RepresentativeRow = {
   name: string;
   district: string;
-  party: string;
 };
+
+type DistrictRow = { name: string };
 
 type IssueQueryRow = {
   id: string;
@@ -124,6 +125,10 @@ type IssueQueryRow = {
   representative:
     | RepresentativeRow
     | RepresentativeRow[]
+    | null;
+  district:
+    | DistrictRow
+    | DistrictRow[]
     | null;
 };
 
@@ -268,6 +273,11 @@ export default function Home() {
       -74.006,
     ]);
 
+  const [selectedLocation, setSelectedLocation] =
+    useState<[number, number] | null>(null);
+  const [selectedDistrictName, setSelectedDistrictName] =
+    useState<string | null>(null);
+
   const handleUserChange = useCallback(
     async (user: User | null) => {
       setAuthenticatedUser(user);
@@ -292,6 +302,26 @@ export default function Home() {
     },
     []
   );
+
+  const resolveDistrictForPoint = async (
+    latitude: number,
+    longitude: number,
+  ) => {
+    setSelectedDistrictName("Resolving Council District…");
+    try {
+      const response = await fetch(
+        `/api/districts/resolve?lat=${latitude}&lng=${longitude}`,
+      );
+      const result: { districtName?: string | null } = await response.json();
+      setSelectedDistrictName(
+        response.ok && result.districtName
+          ? result.districtName
+          : "Council District not resolved",
+      );
+    } catch {
+      setSelectedDistrictName("Council District not resolved");
+    }
+  };
 
   const fetchIssues = useCallback(async () => {
     setLoading(true);
@@ -321,9 +351,9 @@ export default function Home() {
           resolution_proof_url,
           representative:representatives!fk_representative (
             name,
-            district,
-            party
-          )
+            district
+          ),
+          district:districts!issues_district_id_fkey(name)
         `,
           { count: "exact" }
         )
@@ -338,9 +368,21 @@ export default function Home() {
         );
 
       if (searchQuery.trim()) {
-        issueQuery = issueQuery.or(
-          `title.ilike.%${searchQuery.trim()}%,description.ilike.%${searchQuery.trim()}%,category.ilike.%${searchQuery.trim()}%,zip_code.ilike.%${searchQuery.trim()}%`
-        );
+        const districtMatch = searchQuery.match(/(?:council\s+)?district\s+(\d{1,2})/i);
+        if (districtMatch) {
+          const { data: district } = await supabase
+            .from("districts")
+            .select("id")
+            .eq("name", `Council District ${Number(districtMatch[1])}`)
+            .maybeSingle();
+          issueQuery = district
+            ? issueQuery.eq("district_id", district.id)
+            : issueQuery.eq("district_id", "00000000-0000-0000-0000-000000000000");
+        } else {
+          issueQuery = issueQuery.or(
+            `title.ilike.%${searchQuery.trim()}%,description.ilike.%${searchQuery.trim()}%,category.ilike.%${searchQuery.trim()}%`
+          );
+        }
       }
 
       const {
@@ -414,6 +456,14 @@ export default function Home() {
 
               representative_id:
                 row.representative_id,
+
+              council_district: (() => {
+                const districtRow = Array.isArray(row.district)
+                  ? row.district[0]
+                  : row.district;
+                const match = districtRow?.name.match(/(\d+)$/);
+                return match ? Number(match[1]) : null;
+              })(),
 
               resolution_notes:
                 row.resolution_notes,
@@ -957,6 +1007,20 @@ export default function Home() {
         issue.resolution_proof_url ||
         "",
     });
+    const latitude = issue.lat ?? issue.latitude ?? null;
+    const longitude = issue.lng ?? issue.longitude ?? null;
+    if (latitude !== null && longitude !== null) {
+      setSelectedLocation([latitude, longitude]);
+      setMapCenter([latitude, longitude]);
+      setSelectedDistrictName(
+        issue.council_district
+          ? `Council District ${issue.council_district}`
+          : "Council District not resolved",
+      );
+    } else {
+      setSelectedLocation(null);
+      setSelectedDistrictName(null);
+    }
 
     setIsOpen(true);
   };
@@ -967,6 +1031,9 @@ export default function Home() {
         ++geosearchRequestRef.current;
 
       setAddressInput(query);
+      setSelectedLocation(null);
+      setSelectedDistrictName(null);
+      setForm((previous) => ({ ...previous, zip_code: "" }));
 
       if (
         query.trim().length < 3
@@ -1070,6 +1137,8 @@ export default function Home() {
             latitude,
             longitude,
           ]);
+          setSelectedLocation([latitude, longitude]);
+          void resolveDistrictForPoint(latitude, longitude);
 
           setAddressInput(
             "Current location"
@@ -1111,6 +1180,8 @@ export default function Home() {
 
       setForm(defaultForm);
       setAddressInput("");
+      setSelectedLocation(null);
+      setSelectedDistrictName(null);
       setSuggestions([]);
       setIsOpen(false);
       setIsEditing(false);
@@ -1130,8 +1201,7 @@ export default function Home() {
       const description =
         form.description.trim();
 
-      const zipCode =
-        form.zip_code.trim();
+      const zipCode = form.zip_code.trim();
 
       if (title.length < 5) {
         setFormError(
@@ -1149,11 +1219,9 @@ export default function Home() {
         return;
       }
 
-      if (
-        !/^\d{5}$/.test(zipCode)
-      ) {
+      if (!selectedLocation) {
         setFormError(
-          "Enter a valid 5-digit ZIP code."
+          "Choose a geocoded address or use your current location so we can assign the correct Council District."
         );
         return;
       }
@@ -1194,11 +1262,11 @@ export default function Home() {
           description,
           category:
             form.category,
-          zip_code: zipCode,
+          zip_code: zipCode || null,
           urgency:
             form.urgency,
-          lat: mapCenter[0],
-          lng: mapCenter[1],
+          lat: selectedLocation[0],
+          lng: selectedLocation[1],
           status: isEditing
             ? undefined
             : "Submitted",
@@ -1606,6 +1674,7 @@ export default function Home() {
             form={form}
             setForm={setForm}
             addressInput={addressInput}
+            districtName={selectedDistrictName}
             suggestions={suggestions}
             locating={locating}
             formError={formError}
@@ -1625,6 +1694,22 @@ export default function Home() {
               setAddressInput(
                 suggestion.display_name
               );
+
+              if (
+                suggestion.lat !== undefined &&
+                suggestion.lon !== undefined
+              ) {
+                const coordinates: [number, number] = [
+                  suggestion.lat,
+                  suggestion.lon,
+                ];
+                setSelectedLocation(coordinates);
+                setMapCenter(coordinates);
+                void resolveDistrictForPoint(
+                  suggestion.lat,
+                  suggestion.lon,
+                );
+              }
 
               setSuggestions([]);
 

@@ -98,10 +98,7 @@ export interface CivicInitiative {
 export interface CouncilOfficial {
   district: number;
   name: string;
-  party: string;
-  phone: string;
-  email: string;
-  officeAddress: string;
-  website: string;
-  photoUrl: string;
+  term_start: string | null;
+  term_end: string | null;
+  officialDirectoryUrl: string;
 }

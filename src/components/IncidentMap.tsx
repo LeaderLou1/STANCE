@@ -17,6 +17,7 @@ export interface MapIssue {
   category?: string | null;
   title?: string | null;
   description?: string | null;
+  council_district?: number | null;
   zip_code?: string | null;
   upvotes?: number | null;
   lat?: number | null;
@@ -220,8 +221,7 @@ export default function IncidentMap({
 
                 <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] font-semibold text-gray-700">
                   <span>
-                    📍 Zone:{" "}
-                    {issue.zip_code || "Unknown"}
+                    Council District {issue.council_district ?? "unresolved"}
                   </span>
 
                   <button

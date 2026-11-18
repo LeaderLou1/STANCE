@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { DISTRICT_METADATA } from "@/src/data/councilMetadata";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -34,18 +33,12 @@ export async function GET(request: Request) {
       );
     }
 
-    const staticMeta = DISTRICT_METADATA[districtNum];
-    if (!staticMeta) {
-      return NextResponse.json(
-        { error: "Verified contact information is not available for this district." },
-        { status: 404 },
-      );
-    }
-
     const official = {
       district: districtNum,
       name: liveMember.name.trim(),
-      ...staticMeta,
+      term_start: typeof liveMember.term_start === "string" ? liveMember.term_start : null,
+      term_end: typeof liveMember.term_end === "string" ? liveMember.term_end : null,
+      officialDirectoryUrl: "https://council.nyc.gov/districts/",
     };
 
     return NextResponse.json({ official });

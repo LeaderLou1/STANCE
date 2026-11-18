@@ -15,6 +15,7 @@ interface ReportModalProps {
     React.SetStateAction<ReportForm>
   >;
   addressInput: string;
+  districtName: string | null;
   suggestions: AddressSuggestion[];
   locating: boolean;
   formError: string;
@@ -33,6 +34,7 @@ export function ReportModal({
   form,
   setForm,
   addressInput,
+  districtName,
   suggestions,
   locating,
   formError,
@@ -227,6 +229,15 @@ export function ReportModal({
                 : "📍 Locate Me"}
             </button>
           </div>
+
+          <p
+            role="status"
+            className="text-xs text-[#647168]"
+          >
+            {districtName
+              ? `Assigned area: ${districtName}`
+              : "Choose an address or use your location to determine the Council District."}
+          </p>
 
           {suggestions.length > 0 && (
             <ul className="absolute left-0 right-0 z-50 mt-1 max-h-48 divide-y overflow-y-auto rounded-xl border border-gray-200 bg-white text-xs shadow-xl">

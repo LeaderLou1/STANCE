@@ -20,6 +20,7 @@ interface IssueCardIssue {
   urgency?: string | null;
   upvotes: number;
   status: string;
+  council_district?: number | null;
   zip_code?: string | null;
   resolution_proof_url?: string | null;
   resolution_notes?: string | null;
@@ -211,11 +212,7 @@ export function IssueCard<T extends IssueCardIssue>({
                 <span>
                   {issue.representative.name}{" "}
                   <span className="font-normal text-gray-400">
-                    (
-                    {issue.representative.party ||
-                      "Ind."}{" "}
-                    - District{" "}
-                    {issue.representative.district})
+                    · Council District {issue.council_district ?? "unresolved"}
                   </span>
                 </span>
               ) : (
@@ -227,11 +224,8 @@ export function IssueCard<T extends IssueCardIssue>({
 
             <span className="text-gray-300">|</span>
 
-            <span>
-              District Zone:{" "}
-              <strong className="text-gray-700">
-                {issue.zip_code || "—"}
-              </strong>
+            <span className="font-semibold text-[#365444]">
+              Council District {issue.council_district ?? "pending location match"}
             </span>
           </div>
 
