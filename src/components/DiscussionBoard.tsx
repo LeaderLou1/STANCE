@@ -370,6 +370,7 @@ function DiscussionBoard({ issueId }: DiscussionBoardProps) {
                           comment.id,
                           event.currentTarget.value,
                         );
+                        event.currentTarget.value = "";
                       }
                     }}
                   />
