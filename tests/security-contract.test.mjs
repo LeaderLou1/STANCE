@@ -42,6 +42,16 @@ test("mutations have server boundaries", () => {
   assert.match(read("app/auth/page.tsx"), /resetPasswordForEmail/);
 });
 
+test("comment moderation and private media are hardened", () => {
+  const sql = read("supabase/migrations/20261118000100_harden_comment_moderation.sql");
+  assert.match(sql, /moderation_status = 'Pending Review'/);
+  assert.match(sql, /media_url like/);
+  assert.match(sql, /c\.moderation_status = 'Approved'/);
+  assert.match(sql, /i\.moderation_status = 'Approved'/);
+  assert.match(read("src/components/DiscussionBoard.tsx"), /createSignedUrl/);
+  assert.doesNotMatch(read("src/components/DiscussionBoard.tsx"), /getPublicUrl/);
+});
+
 test("production documentation does not use starter content", () => {
   const readme = read("README.md");
   assert.match(readme, /STANCE/);

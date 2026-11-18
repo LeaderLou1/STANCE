@@ -15,9 +15,11 @@ interface Comment {
   id: string;
   issue_id: string;
   parent_id: string | null;
+  user_id?: string;
   user_role: "resident" | "representative" | "admin";
   content: string;
   media_url?: string | null;
+  status?: string;
   upvotes: number;
   created_at: string;
 }
@@ -32,6 +34,9 @@ interface VoteResponse {
 
 function DiscussionBoard({ issueId }: DiscussionBoardProps) {
   const [comments, setComments] = useState<Comment[]>([]);
+  const [resolvedMediaUrls, setResolvedMediaUrls] = useState<
+    Record<string, string>
+  >({});
   const [newComment, setNewComment] = useState("");
   const [attachedMediaUrl, setAttachedMediaUrl] =
     useState<string | null>(null);
@@ -66,6 +71,50 @@ function DiscussionBoard({ issueId }: DiscussionBoardProps) {
       cancelled = true;
     };
   }, [issueId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolveMediaUrls = async () => {
+      const resolved = await Promise.all(
+        comments.map(async (comment) => {
+          if (!comment.media_url) return [comment.id, null] as const;
+          if (
+            comment.media_url.startsWith("http://") ||
+            comment.media_url.startsWith("https://")
+          ) {
+            return [comment.id, comment.media_url] as const;
+          }
+
+          const { data, error } =
+            await supabase.storage
+              .from("issue-media")
+              .createSignedUrl(comment.media_url, 3600);
+
+          return [
+            comment.id,
+            error ? null : data?.signedUrl ?? null,
+          ] as const;
+        }),
+      );
+
+      if (cancelled) return;
+
+      setResolvedMediaUrls(
+        Object.fromEntries(
+          resolved.filter((entry): entry is readonly [string, string] =>
+            Boolean(entry[1]),
+          ),
+        ),
+      );
+    };
+
+    void resolveMediaUrls();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [comments]);
 
   const refreshComments = async () => {
     const { data, error } = await supabase
@@ -227,130 +276,135 @@ function DiscussionBoard({ issueId }: DiscussionBoardProps) {
       </div>
 
       <div className="space-y-3">
-        {rootComments.map((comment) => (
-          <div key={comment.id} className="space-y-2">
-            <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
-              <div className="mb-1 flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
-                      comment.user_role === "representative"
-                        ? "flex items-center gap-0.5 border border-amber-200 bg-amber-50 text-amber-800"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {comment.user_role === "representative" && (
-                      <ShieldCheck className="h-3 w-3 text-amber-700" />
-                    )}
+        {rootComments.map((comment) => {
+          const resolvedMediaUrl =
+            resolvedMediaUrls[comment.id] ?? null;
 
-                    {comment.user_role}
-                  </span>
+          return (
+            <div key={comment.id} className="space-y-2">
+              <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+                <div className="mb-1 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                        comment.user_role === "representative"
+                          ? "flex items-center gap-0.5 border border-amber-200 bg-amber-50 text-amber-800"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {comment.user_role === "representative" && (
+                        <ShieldCheck className="h-3 w-3 text-amber-700" />
+                      )}
 
-                  <span className="text-[10px] text-slate-400">
-                    {new Date(
-                      comment.created_at,
-                    ).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-700">
-                {comment.content}
-              </p>
-
-              {comment.media_url && (
-                <div className="mt-2 max-w-xs overflow-hidden rounded-lg border">
-                  {comment.media_url.match(
-                    /\.(mp4|webm|ogg|mov)(\?.*)?$/i,
-                  ) ? (
-                    <video
-                      src={comment.media_url}
-                      controls
-                      className="h-auto max-h-48 w-full object-cover"
-                    />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={comment.media_url}
-                      alt="Discussion proof"
-                      className="h-auto max-h-48 w-full object-cover"
-                    />
-                  )}
-                </div>
-              )}
-
-              <div className="mt-2 flex items-center gap-3 text-[11px] font-bold text-slate-400">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void handleCommentUpvote(comment.id)
-                  }
-                  className="flex items-center gap-1 transition hover:text-emerald-700"
-                >
-                  <ThumbsUp className="h-3 w-3" />
-                  {comment.upvotes}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveReplyId(comment.id)
-                  }
-                  className="hover:text-slate-600"
-                >
-                  Reply
-                </button>
-              </div>
-            </div>
-
-            {activeReplyId === comment.id && (
-              <div className="flex items-center gap-2 pl-6">
-                <CornerDownRight className="h-4 w-4 shrink-0 text-slate-300" />
-
-                <input
-                  className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-emerald-700"
-                  placeholder="Type your reply..."
-                  autoFocus
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      void handleSubmitComment(
-                        comment.id,
-                        event.currentTarget.value,
-                      );
-                    }
-                  }}
-                />
-              </div>
-            )}
-
-            {getRepliesFor(comment.id).map((reply) => (
-              <div
-                key={reply.id}
-                className="flex gap-2 pl-6"
-              >
-                <CornerDownRight className="mt-2 h-4 w-4 shrink-0 text-slate-300" />
-
-                <div className="flex-1 rounded-xl border bg-slate-50 p-2.5 text-xs">
-                  <div className="mb-0.5">
-                    <span className="mr-1.5 text-[10px] font-bold uppercase text-slate-600">
-                      {reply.user_role}
+                      {comment.user_role}
                     </span>
 
                     <span className="text-[10px] text-slate-400">
                       {new Date(
-                        reply.created_at,
+                        comment.created_at,
                       ).toLocaleDateString()}
                     </span>
                   </div>
+                </div>
 
-                  <p className="text-slate-700">
-                    {reply.content}
-                  </p>
+                <p className="text-xs text-slate-700">
+                  {comment.content}
+                </p>
+
+                {resolvedMediaUrl && (
+                  <div className="mt-2 max-w-xs overflow-hidden rounded-lg border">
+                    {resolvedMediaUrl.match(
+                      /\.(mp4|webm|ogg|mov)(\?.*)?$/i,
+                    ) ? (
+                      <video
+                        src={resolvedMediaUrl}
+                        controls
+                        className="h-auto max-h-48 w-full object-cover"
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={resolvedMediaUrl}
+                        alt="Discussion proof"
+                        className="h-auto max-h-48 w-full object-cover"
+                      />
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-2 flex items-center gap-3 text-[11px] font-bold text-slate-400">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleCommentUpvote(comment.id)
+                    }
+                    className="flex items-center gap-1 transition hover:text-emerald-700"
+                  >
+                    <ThumbsUp className="h-3 w-3" />
+                    {comment.upvotes}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveReplyId(comment.id)
+                    }
+                    className="hover:text-slate-600"
+                  >
+                    Reply
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        ))}
+
+              {activeReplyId === comment.id && (
+                <div className="flex items-center gap-2 pl-6">
+                  <CornerDownRight className="h-4 w-4 shrink-0 text-slate-300" />
+
+                  <input
+                    className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-emerald-700"
+                    placeholder="Type your reply..."
+                    autoFocus
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        void handleSubmitComment(
+                          comment.id,
+                          event.currentTarget.value,
+                        );
+                      }
+                    }}
+                  />
+                </div>
+              )}
+
+              {getRepliesFor(comment.id).map((reply) => (
+                <div
+                  key={reply.id}
+                  className="flex gap-2 pl-6"
+                >
+                  <CornerDownRight className="mt-2 h-4 w-4 shrink-0 text-slate-300" />
+
+                  <div className="flex-1 rounded-xl border bg-slate-50 p-2.5 text-xs">
+                    <div className="mb-0.5">
+                      <span className="mr-1.5 text-[10px] font-bold uppercase text-slate-600">
+                        {reply.user_role}
+                      </span>
+
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(
+                          reply.created_at,
+                        ).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <p className="text-slate-700">
+                      {reply.content}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
