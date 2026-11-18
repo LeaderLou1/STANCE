@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { MediaUploader } from "./MediaUploader";
 import {
   AddressSuggestion,
@@ -20,6 +20,7 @@ interface ReportModalProps {
   locating: boolean;
   formError: string;
   submitting: boolean;
+  locationError: string;
   onAddressSearch: (text: string) => void;
   onUseMyLocation: () => void;
   onSelectSuggestion: (
@@ -39,15 +40,61 @@ export function ReportModal({
   locating,
   formError,
   submitting,
+  locationError,
   onAddressSearch,
   onUseMyLocation,
   onSelectSuggestion,
   onClose,
   onSubmit,
 }: ReportModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const focusable = dialog.querySelector<HTMLElement>(
+      "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])",
+    );
+    focusable?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const elements = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href]",
+        ),
+      );
+      if (elements.length === 0) return;
+
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#17211d]/55 p-4 backdrop-blur-sm">
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="report-modal-title"
@@ -238,6 +285,11 @@ export function ReportModal({
               ? `Assigned area: ${districtName}`
               : "Choose an address or use your location to determine the Council District."}
           </p>
+          {locationError && (
+            <p role="alert" className="text-xs font-semibold text-red-700">
+              {locationError}
+            </p>
+          )}
 
           {suggestions.length > 0 && (
             <ul className="absolute left-0 right-0 z-50 mt-1 max-h-48 divide-y overflow-y-auto rounded-xl border border-gray-200 bg-white text-xs shadow-xl">

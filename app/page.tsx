@@ -254,6 +254,12 @@ export default function Home() {
 
   const [formError, setFormError] = useState("");
 
+  const [issuesError, setIssuesError] = useState("");
+
+  const [actionError, setActionError] = useState("");
+
+  const [locationError, setLocationError] = useState("");
+
   const [submitting, setSubmitting] = useState(false);
 
   const [confirmationMessage, setConfirmationMessage] =
@@ -307,6 +313,7 @@ export default function Home() {
     latitude: number,
     longitude: number,
   ) => {
+    setLocationError("");
     setSelectedDistrictName("Resolving Council District…");
     try {
       const response = await fetch(
@@ -488,6 +495,9 @@ export default function Home() {
 
       setIssues(rows);
     } catch (error: unknown) {
+      setIssuesError(
+        "We could not load community reports. Please refresh and try again.",
+      );
       console.error(
         "fetchIssues error:",
         getErrorMessage(error)
@@ -520,6 +530,7 @@ export default function Home() {
           );
         }
       } catch (error: unknown) {
+        setActionError(getErrorMessage(error));
         console.error(
           "Initiative stream loading error:",
           getErrorMessage(error)
@@ -573,6 +584,7 @@ export default function Home() {
           setWorkOrders(cleanData);
         }
       } catch (error: unknown) {
+        setActionError(getErrorMessage(error));
         console.error(
           "fetchWorkOrders error:",
           getErrorMessage(error)
@@ -624,6 +636,9 @@ export default function Home() {
           setRiskAnalytics(cleanData);
         }
       } catch (error: unknown) {
+        setLocationError(
+          "We could not search this address. Check your connection and try again.",
+        );
         console.error(
           "Analytics stream failed:",
           getErrorMessage(error)
@@ -668,6 +683,9 @@ export default function Home() {
           );
         }
       } catch (error: unknown) {
+        setLocationError(
+          "We could not search this address. Check your connection and try again.",
+        );
         console.error(
           "CRM metrics pull failed:",
           getErrorMessage(error)
@@ -799,6 +817,7 @@ export default function Home() {
       );
     } catch (error: unknown) {
       setIssues(previousIssues);
+      setActionError(getErrorMessage(error));
 
       console.error(
         "Upvote failed, rolling back:",
@@ -855,7 +874,10 @@ export default function Home() {
         void fetchWorkOrders();
         void fetchRiskAnalytics();
         void fetchCampaignIntelligence();
+        setConfirmationMessage("Report status updated successfully.");
+        setActionError("");
       } catch (error: unknown) {
+        setActionError(getErrorMessage(error));
         console.error(
           "Update status failed:",
           getErrorMessage(error)
@@ -865,14 +887,6 @@ export default function Home() {
 
   const handleDeleteIssue =
     async (issueId: string) => {
-      if (
-        !confirm(
-          "Are you sure you want to execute a system delete?"
-        )
-      ) {
-        return;
-      }
-
       try {
         const {
           data: sessionData,
@@ -913,10 +927,13 @@ export default function Home() {
               item.id !== issueId
           )
         );
+        setConfirmationMessage("Report deleted successfully.");
+        setActionError("");
 
         void fetchRiskAnalytics();
         void fetchCampaignIntelligence();
       } catch (error: unknown) {
+        setActionError(getErrorMessage(error));
         console.error(
           "Delete issue failed:",
           getErrorMessage(error)
@@ -925,15 +942,10 @@ export default function Home() {
     };
 
   const handleAddReply = async (
-    issueId: string
+    issueId: string,
+    replyText: string,
   ) => {
-    const replyText = prompt(
-      "Type official response:"
-    );
-
-    if (!replyText) {
-      return;
-    }
+    if (!replyText.trim()) return;
 
     try {
       const {
@@ -977,7 +989,10 @@ export default function Home() {
 
       void fetchIssues();
       void fetchCampaignIntelligence();
+      setConfirmationMessage("Official reply added successfully.");
+      setActionError("");
     } catch (error: unknown) {
+      setActionError(getErrorMessage(error));
       console.error(
         "Add reply failed:",
         getErrorMessage(error)
@@ -1030,6 +1045,7 @@ export default function Home() {
       const requestId =
         ++geosearchRequestRef.current;
 
+      setLocationError("");
       setAddressInput(query);
       setSelectedLocation(null);
       setSelectedDistrictName(null);
@@ -1118,6 +1134,7 @@ export default function Home() {
   const handleUseMyLocation =
     () => {
       if (!navigator.geolocation) {
+        setLocationError("Location access is not supported by this browser.");
         console.error(
           "Geolocation is not supported by this browser."
         );
@@ -1133,6 +1150,7 @@ export default function Home() {
             longitude,
           } = position.coords;
 
+          setLocationError("");
           setMapCenter([
             latitude,
             longitude,
@@ -1148,6 +1166,10 @@ export default function Home() {
           setLocating(false);
         },
         (error) => {
+          setLocationError(
+            error.message ||
+              "We could not access your location.",
+          );
           console.error(
             "Location access failed:",
             error.message ||
@@ -1509,6 +1531,15 @@ export default function Home() {
           </div>
         )}
 
+        {actionError && (
+          <div
+            role="alert"
+            className="mb-6 border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"
+          >
+            {actionError}
+          </div>
+        )}
+
     
 
         {currentRole === "resident" && (
@@ -1593,6 +1624,12 @@ export default function Home() {
                 </div>
               )}
 
+            {issuesError && (
+              <div role="alert" className="border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+                {issuesError}
+              </div>
+            )}
+
             {sortedIssues.map(
               (issue) => (
                 <IssueCard
@@ -1601,6 +1638,7 @@ export default function Home() {
                   currentRole={
                     currentRole
                   }
+                  ownerId={authenticatedUser?.id}
                   onUpvote={
                     handleUpvote
                   }
@@ -1679,6 +1717,7 @@ export default function Home() {
             locating={locating}
             formError={formError}
             submitting={submitting}
+            locationError={locationError}
             onAddressSearch={
               handleNYCAddressSearch
             }

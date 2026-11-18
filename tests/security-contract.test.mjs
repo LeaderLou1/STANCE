@@ -52,6 +52,19 @@ test("comment moderation and private media are hardened", () => {
   assert.doesNotMatch(read("src/components/DiscussionBoard.tsx"), /getPublicUrl/);
 });
 
+test("app audit fixes are represented in source", () => {
+  assert.match(read("next.config.ts"), /\/storage\/v1\/object\/sign\/\*\*/);
+  assert.match(read("src/components/IssueCard.tsx"), /ownerId/);
+  assert.match(read("src/components/IssueCard.tsx"), /Delete\?/);
+  assert.match(read("src/components/IssueCard.tsx"), /Official Reply/);
+  assert.match(read("src/components/ReportModal.tsx"), /Escape/);
+  assert.match(read("src/components/ReportModal.tsx"), /locationError/);
+  assert.doesNotMatch(read("app/page.tsx"), /confirm\(|prompt\(/);
+  assert.match(read("app/page.tsx"), /issuesError/);
+  assert.match(read("app/page.tsx"), /actionError/);
+  assert.match(read("src/components/AuthPanel.tsx"), /could not verify/);
+});
+
 test("production documentation does not use starter content", () => {
   const readme = read("README.md");
   assert.match(readme, /STANCE/);

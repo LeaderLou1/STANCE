@@ -19,7 +19,7 @@ export function AuthPanel({ onUserChange }: AuthPanelProps) {
     void supabase.auth.getUser().then(({ data, error }) => {
       if (!mounted) return;
       if (error) {
-        setAuthMessage("Session expired. Please sign in again.");
+        setAuthMessage("We could not verify your saved session.");
         setUser(null);
         void onUserChange(null);
         return;

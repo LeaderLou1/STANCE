@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   ArrowUp,
   ShieldCheck,
@@ -14,6 +14,7 @@ import Image from "next/image";
 
 interface IssueCardIssue {
   id: string;
+  reporter_id?: string;
   title: string;
   description: string;
   category: string;
@@ -34,17 +35,19 @@ interface IssueCardIssue {
 interface IssueCardProps<T extends IssueCardIssue> {
   issue: T;
   currentRole: UserRole;
+  ownerId?: string | null;
   onUpvote: (id: string, votes: number) => void;
   onUpdateStatus: (id: string, status: string) => void;
   onStartEditing: (issue: T) => void;
   onDelete: (id: string) => void;
-  onAddReply: (id: string) => void;
+  onAddReply: (id: string, reply: string) => void;
   onDispatchWorkOrder?: (id: string) => void;
 }
 
 export function IssueCard<T extends IssueCardIssue>({
   issue,
   currentRole,
+  ownerId,
   onUpvote,
   onUpdateStatus,
   onStartEditing,
@@ -52,6 +55,11 @@ export function IssueCard<T extends IssueCardIssue>({
   onAddReply,
   onDispatchWorkOrder,
 }: IssueCardProps<T>) {
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const isOwner = Boolean(ownerId && issue.reporter_id === ownerId);
+
   return (
     <div className="group flex flex-col gap-5 border border-[#cbd5cc] bg-[#fffefa] p-5 transition hover:-translate-y-0.5 hover:border-[#91aa99] hover:shadow-[0_12px_30px_rgba(23,33,29,0.08)] sm:flex-row sm:p-6">
       {/* UPVOTE COLUMN */}
@@ -117,12 +125,12 @@ export function IssueCard<T extends IssueCardIssue>({
                     />
                   ) : (
                     <Image
-  src={issue.resolution_proof_url}
-  alt="Resolution evidence"
-  width={800}
-  height={600}
-  className="..."
-/>
+                      src={issue.resolution_proof_url}
+                      alt="Resolution evidence"
+                      width={800}
+                      height={600}
+                      className="h-auto max-h-72 w-full object-contain"
+                    />
                   )}
                 </div>
               )}
@@ -158,17 +166,45 @@ export function IssueCard<T extends IssueCardIssue>({
 
               {/* REPRESENTATIVE REPLY */}
               {currentRole === "representative" && (
-                <button
-                  type="button"
-                  onClick={() => onAddReply(issue.id)}
-                  className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-[#0f5132] transition hover:bg-emerald-100"
-                >
-                  Official Reply
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setReplyOpen((open) => !open)}
+                    className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-[#0f5132] transition hover:bg-emerald-100"
+                  >
+                    Official Reply
+                  </button>
+                  {replyOpen && (
+                    <div className="flex w-full max-w-sm items-end gap-2">
+                      <label className="flex-1 text-xs font-semibold text-slate-600">
+                        Response
+                        <textarea
+                          value={replyText}
+                          onChange={(event) => setReplyText(event.target.value)}
+                          maxLength={2000}
+                          rows={3}
+                          className="mt-1 w-full resize-y border border-emerald-200 bg-white p-2 text-sm font-normal outline-none focus:ring-2 focus:ring-emerald-100"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={!replyText.trim()}
+                        onClick={() => {
+                          onAddReply(issue.id, replyText.trim());
+                          setReplyText("");
+                          setReplyOpen(false);
+                        }}
+                        className="rounded-md bg-emerald-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* RESIDENT ACTIONS */}
-              {currentRole === "resident" && (
+              {currentRole === "resident" && isOwner && (
                 <>
                   <button
                     type="button"
@@ -178,13 +214,36 @@ export function IssueCard<T extends IssueCardIssue>({
                     Edit Request
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => onDelete(issue.id)}
-                    className="rounded-md border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100"
-                  >
-                    Delete
-                  </button>
+                  {deleteConfirmationOpen ? (
+                    <span className="flex items-center gap-1 rounded-md border border-red-100 bg-red-50 p-1">
+                      <span className="px-1 text-xs font-semibold text-red-700">Delete?</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onDelete(issue.id);
+                          setDeleteConfirmationOpen(false);
+                        }}
+                        className="rounded bg-red-600 px-2 py-1 text-xs font-bold text-white"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmationOpen(false)}
+                        className="px-2 py-1 text-xs font-semibold text-slate-600"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmationOpen(true)}
+                      className="rounded-md border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </>
               )}
 
