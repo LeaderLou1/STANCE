@@ -40,6 +40,8 @@ jobs:
         env:
           SUPABASE_TEST_EMAIL: ${{ secrets.SUPABASE_TEST_EMAIL }}
           SUPABASE_TEST_PASSWORD: ${{ secrets.SUPABASE_TEST_PASSWORD }}
+          TEST_USER_EMAIL: ${{ secrets.SUPABASE_TEST_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.SUPABASE_TEST_PASSWORD }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
