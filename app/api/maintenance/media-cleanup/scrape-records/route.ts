@@ -7,6 +7,16 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+interface DotPermitRecord {
+  permit_type?: string;
+  permittee?: string;
+  on_street?: string;
+  location?: string;
+  issued_date?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
 export async function GET(request: Request) {
   // Verify cron secret header for security (e.g. Vercel Cron)
   const authHeader = request.headers.get('authorization');
@@ -33,19 +43,22 @@ export async function GET(request: Request) {
       throw new Error(`NYC OpenData fetch failed with status ${response.status}`);
     }
 
-    const permits = await response.json();
+    const permits: DotPermitRecord[] = await response.json();
     let insertedCount = 0;
 
     for (const permit of permits) {
       // Upsert or process records into Supabase district_permits
-      const { error } = await supabaseAdmin.from('district_permits').upsert({
-        permit_type: permit.permit_type || 'General Construction',
-        permittee_name: permit.permittee || 'Unknown',
-        location_address: permit.on_street || permit.location || 'NYC Corridor',
-        issued_date: permit.issued_date || new Date().toISOString(),
-        status: permit.status || 'Active',
-        raw_payload: permit,
-      }, { onConflict: 'id' });
+      const { error } = await supabaseAdmin.from('district_permits').upsert(
+        {
+          permit_type: permit.permit_type || 'General Construction',
+          permittee_name: permit.permittee || 'Unknown',
+          location_address: permit.on_street || permit.location || 'NYC Corridor',
+          issued_date: permit.issued_date || new Date().toISOString(),
+          status: permit.status || 'Active',
+          raw_payload: permit,
+        },
+        { onConflict: 'id' }
+      );
 
       if (!error) insertedCount++;
     }
@@ -54,8 +67,10 @@ export async function GET(request: Request) {
       success: true,
       message: `Successfully ingested ${insertedCount} public records into STANCE ledger.`,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Scraper maintenance error:', err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    const errorMessage =
+      err instanceof Error ? err.message : 'An unexpected error occurred during ingestion.';
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
