@@ -15,6 +15,8 @@ import Image from "next/image";
 interface IssueCardIssue {
   id: string;
   reporter_id?: string;
+  lat?: number | null;
+  lng?: number | null;
   title: string;
   description: string;
   category: string;
@@ -41,6 +43,7 @@ interface IssueCardProps<T extends IssueCardIssue> {
   onStartEditing: (issue: T) => void;
   onDelete: (id: string) => void;
   onAddReply: (id: string, reply: string) => void;
+  onSelectIssue?: (issue: T) => void;
   onDispatchWorkOrder?: (id: string) => void;
 }
 
@@ -53,6 +56,7 @@ export function IssueCard<T extends IssueCardIssue>({
   onStartEditing,
   onDelete,
   onAddReply,
+  onSelectIssue,
   onDispatchWorkOrder,
 }: IssueCardProps<T>) {
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
@@ -105,7 +109,22 @@ export function IssueCard<T extends IssueCardIssue>({
           <div className="mt-3 flex items-start justify-between">
             <div className="flex-1">
               <h3 className="text-lg font-black tracking-[-0.025em] text-[#17211d]">
-                {issue.title}
+                {onSelectIssue &&
+                typeof issue.lat === "number" &&
+                Number.isFinite(issue.lat) &&
+                typeof issue.lng === "number" &&
+                Number.isFinite(issue.lng) ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectIssue(issue)}
+                    className="text-left hover:text-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
+                    aria-label={`Locate ${issue.title} on map`}
+                  >
+                    {issue.title}
+                  </button>
+                ) : (
+                  issue.title
+                )}
               </h3>
 
               <p className="mt-1 text-sm leading-6 text-[#647168]">

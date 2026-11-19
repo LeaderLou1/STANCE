@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import { MediaUploader } from "./MediaUploader";
 import {
   AddressSuggestion,
@@ -100,14 +101,24 @@ export function ReportModal({
         aria-labelledby="report-modal-title"
         className="max-h-[90vh] w-full max-w-2xl space-y-5 overflow-y-auto border border-[#cbd5cc] bg-[#fffefa] p-6 shadow-[0_24px_80px_rgba(23,33,29,0.22)] sm:p-8"
       >
-        <h2
-          id="report-modal-title"
-          className="border-b border-[#cbd5cc] pb-4 text-2xl font-black tracking-[-0.04em] text-[#17211d]"
-        >
-          {isEditing
-            ? "Modify Accountability Report"
-            : "File Accountability Report"}
-        </h2>
+        <div className="flex items-start justify-between gap-4 border-b border-[#cbd5cc] pb-4">
+          <h2
+            id="report-modal-title"
+            className="text-2xl font-black tracking-[-0.04em] text-[#17211d]"
+          >
+            {isEditing
+              ? "Modify Accountability Report"
+              : "File Accountability Report"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close accountability report"
+            className="-mr-2 -mt-2 inline-flex h-10 w-10 shrink-0 items-center justify-center text-[#647168] transition hover:bg-[#f3f1ec] hover:text-[#17211d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2f7d5b]"
+          >
+            <X aria-hidden="true" className="h-5 w-5" />
+          </button>
+        </div>
 
         {/* ISSUE SUMMARY */}
         <div className="space-y-1">

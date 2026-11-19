@@ -10,6 +10,13 @@ const inputClass =
 
 type AuthMode = "signin" | "signup" | "reset" | "update-password";
 
+interface CouncilDistrictOption {
+  id: string;
+  number: number;
+  name: string;
+  representativeName: string | null;
+}
+
 function subscribeToHash(callback: () => void) {
   window.addEventListener("hashchange", callback);
 
@@ -34,6 +41,10 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [zipCode, setZipCode] = useState("");
+  const [districts, setDistricts] = useState<CouncilDistrictOption[]>([]);
+  const [districtsLoading, setDistrictsLoading] = useState(false);
+  const [districtsError, setDistrictsError] = useState("");
+  const [councilDistrict, setCouncilDistrict] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -51,6 +62,34 @@ export default function AuthPage() {
     ? "update-password"
     : selectedMode;
 
+  const loadDistricts = async () => {
+    setDistrictsLoading(true);
+    setDistrictsError("");
+
+    try {
+      const response = await fetch("/api/districts");
+      const result = (await response.json()) as {
+        districts?: CouncilDistrictOption[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(result.error || "Could not load council districts.");
+      }
+      if (!Array.isArray(result.districts) || result.districts.length === 0) {
+        throw new Error("No council districts are available for signup yet.");
+      }
+      setDistricts(result.districts);
+    } catch (loadError) {
+      setDistrictsError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Could not load council districts.",
+      );
+    } finally {
+      setDistrictsLoading(false);
+    }
+  };
+
   const hashMessage =
     isRecoveryHash
       ? "Please enter your new password below."
@@ -62,6 +101,16 @@ export default function AuthPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (
+      mode === "signup" &&
+      !districts.some(
+        (district) => String(district.number) === councilDistrict,
+      )
+    ) {
+      setError("Choose your NYC Council District to continue.");
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -116,6 +165,7 @@ export default function AuthPage() {
               data: {
                 full_name: fullName.trim(),
                 zip_code: zipCode,
+                council_district: councilDistrict,
               },
             },
           })
@@ -159,6 +209,9 @@ export default function AuthPage() {
     setError("");
     setMessage("");
     setCanResendConfirmation(false);
+    if (nextMode === "signup" && districts.length === 0 && !districtsLoading) {
+      void loadDistricts();
+    }
   };
 
   const resendConfirmation = async () => {
@@ -279,9 +332,64 @@ export default function AuthPage() {
                   />
                 </label>
 
-                <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
+                <label
+                  htmlFor="council-district"
+                  className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
+                >
+                  NYC Council District
+                  <select
+                    id="council-district"
+                    className={`${inputClass} mt-2`}
+                    value={councilDistrict}
+                    onChange={(event) => setCouncilDistrict(event.target.value)}
+                    required
+                    disabled={districtsLoading || districts.length === 0}
+                  >
+                    <option value="">
+                      {districtsLoading
+                        ? "Loading districts..."
+                        : "Choose your council district"}
+                    </option>
+                    {districts.map((district) => (
+                      <option key={district.id} value={district.number}>
+                        {district.name}
+                        {district.representativeName
+                          ? ` — ${district.representativeName}`
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <p className="-mt-2 text-xs leading-5 text-[#647168]">
+                  Your district connects your account with the right local
+                  representative. ZIP code is optional and is only used as
+                  additional location context.
+                </p>
+
+                {districtsError && (
+                  <div
+                    role="alert"
+                    className="flex items-center justify-between gap-3 border border-[#e6b7b0] bg-[#fdf0ed] p-3 text-xs font-semibold text-[#a33d2f]"
+                  >
+                    <span>{districtsError}</span>
+                    <button
+                      type="button"
+                      onClick={() => void loadDistricts()}
+                      className="shrink-0 underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                <label
+                  htmlFor="signup-zip-code"
+                  className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
+                >
                   ZIP code (optional)
                   <input
+                    id="signup-zip-code"
                     className={`${inputClass} mt-2`}
                     inputMode="numeric"
                     maxLength={5}

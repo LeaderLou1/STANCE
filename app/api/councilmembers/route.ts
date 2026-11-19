@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       name: liveMember.name.trim(),
       term_start: typeof liveMember.term_start === "string" ? liveMember.term_start : null,
       term_end: typeof liveMember.term_end === "string" ? liveMember.term_end : null,
-      officialDirectoryUrl: "https://council.nyc.gov/districts/",
+      officialDirectoryUrl: `https://council.nyc.gov/district-${districtNum}/`,
     };
 
     return NextResponse.json({ official });

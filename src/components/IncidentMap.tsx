@@ -28,7 +28,10 @@ export interface MapIssue {
 interface IncidentMapProps {
   issues: MapIssue[];
   centerCoordinates?: [number, number] | number[];
+  zoom?: number;
+  focusRequest?: number;
   onUpvote?: (id: string) => Promise<void>;
+  onSelectIssue?: (issue: MapIssue) => void;
 }
 
 interface RealtimePayload {
@@ -85,14 +88,19 @@ const createPinIcon = (isUrgent: boolean) => {
 
 function ChangeMapView({
   center,
+  zoom,
+  focusRequest,
 }: {
   center: [number, number];
+  zoom: number;
+  focusRequest: number;
 }) {
   const map = useMap();
+  const [latitude, longitude] = center;
 
   useEffect(() => {
-    map.setView(center, map.getZoom(), { animate: true });
-  }, [center, map]);
+    map.setView([latitude, longitude], zoom, { animate: false });
+  }, [latitude, longitude, zoom, focusRequest, map]);
 
   return null;
 }
@@ -100,19 +108,29 @@ function ChangeMapView({
 export default function IncidentMap({
   issues: initialIssues,
   centerCoordinates = [40.7128, -74.006],
+  zoom = 13,
+  focusRequest = 0,
   onUpvote,
+  onSelectIssue,
 }: IncidentMapProps) {
   const [realtimeIssues, setRealtimeIssues] =
     useState<MapIssue[]>(initialIssues);
+  const cartoApiKey = process.env.NEXT_PUBLIC_CARTO_API_KEY?.trim();
+  const [usePublicTiles, setUsePublicTiles] =
+    useState(!cartoApiKey);
 
   const mapCenter: [number, number] = [
     Number(centerCoordinates[0]),
     Number(centerCoordinates[1]),
   ];
+  const tileUrl =
+    usePublicTiles || !cartoApiKey
+      ? "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+      : `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cartoApiKey)}`;
 
   useEffect(() => {
     const channel = supabase
-      .channel("incident-map-realtime")
+      .channel(`incident-map-realtime:${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         {
@@ -175,28 +193,37 @@ export default function IncidentMap({
     () =>
       issues.filter(
         (issue) =>
-          issue.lat !== undefined &&
-          issue.lat !== null &&
-          issue.lng !== undefined &&
-          issue.lng !== null
+          typeof issue.lat === "number" &&
+          Number.isFinite(issue.lat) &&
+          typeof issue.lng === "number" &&
+          Number.isFinite(issue.lng)
       ),
     [issues]
   );
 
   return (
-    <div className="relative z-10 h-96 w-full overflow-hidden rounded-2xl border border-neutral-200/80 shadow-xl transition-all duration-300">
+    <div className="relative z-10 h-[450px] w-full overflow-hidden rounded-2xl border border-neutral-200/80 shadow-xl transition-all duration-300">
       <MapContainer
         center={mapCenter}
-        zoom={13}
+        zoom={zoom}
+        maxZoom={19}
         scrollWheelZoom={false}
         className="h-full w-full"
       >
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          url={tileUrl}
+          maxZoom={19}
+          eventHandlers={{
+            tileerror: () => setUsePublicTiles(true),
+          }}
         />
 
-        <ChangeMapView center={mapCenter} />
+        <ChangeMapView
+          center={mapCenter}
+          zoom={zoom}
+          focusRequest={focusRequest}
+        />
 
         {locatedIssues.map((issue) => {
           const isUrgent =
@@ -211,6 +238,9 @@ export default function IncidentMap({
                 issue.lng as number,
               ]}
               icon={pinIcon}
+              eventHandlers={{
+                click: () => onSelectIssue?.(issue),
+              }}
             >
               <Popup maxWidth={320} minWidth={240} className="rounded-xl shadow-2xl">
                 <div className="p-2">

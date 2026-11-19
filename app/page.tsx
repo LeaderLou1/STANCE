@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { User } from "@supabase/supabase-js";
+import Link from "next/link";
 import type { AuthPanelProps } from "../src/components/AuthPanel";
 import { supabase } from "@/src/lib/supabase";
 import {
@@ -39,6 +40,19 @@ const AuthPanel = dynamic<AuthPanelProps>(
     ssr: false,
     loading: () => (
       <div className="h-9 w-32 animate-pulse rounded-lg bg-[#e9e7e0]" />
+    ),
+  }
+);
+
+// Dynamically import IncidentMap with SSR disabled so Leaflet loads only in the browser
+const IncidentMap = dynamic(
+  () => import("@/src/components/IncidentMap"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-96 w-full items-center justify-center rounded-2xl bg-neutral-100 font-medium text-neutral-400 animate-pulse">
+        Loading live civic map...
+      </div>
     ),
   }
 );
@@ -84,14 +98,6 @@ export interface RiskData {
   aggregate_community_urgency: number;
 }
 
-/**
- * IMPORTANT:
- * Do NOT redeclare `urgency` here.
- *
- * CivicIssue already owns the urgency type.
- * Redefining it inside an intersection was causing
- * TypeScript to reduce IssueWithRep to `never`.
- */
 type IssueWithRep = CivicIssue & {
   lat?: number | null;
   lng?: number | null;
@@ -278,6 +284,27 @@ export default function Home() {
       40.7128,
       -74.006,
     ]);
+  const [mapZoom, setMapZoom] = useState(13);
+  const [mapFocusRequest, setMapFocusRequest] = useState(0);
+
+  const focusIncident = useCallback(
+    (issue: { id: string; lat?: number | null; lng?: number | null }) => {
+      const { lat, lng } = issue;
+      if (
+        typeof lat !== "number" ||
+        !Number.isFinite(lat) ||
+        typeof lng !== "number" ||
+        !Number.isFinite(lng)
+      ) {
+        return;
+      }
+
+      setMapCenter([lat, lng]);
+      setMapZoom(17);
+      setMapFocusRequest((request) => request + 1);
+    },
+    [],
+  );
 
   const [selectedLocation, setSelectedLocation] =
     useState<[number, number] | null>(null);
@@ -1378,7 +1405,7 @@ export default function Home() {
   const mapFilteredIssues =
     useMemo(
       () =>
-        issues.filter(
+        (Array.isArray(issues) ? issues : []).filter(
           (issue) =>
             issue.lat !== null &&
             issue.lat !== undefined &&
@@ -1390,388 +1417,209 @@ export default function Home() {
 
   const sortedIssues =
     useMemo(() => {
-      const weights: Record<
-        IssueUrgency,
-        number
-      > = {
+      const weights: Record<IssueUrgency, number> = {
         "Critical Danger": 4,
         "High Breakdown": 3,
         "Medium Baseline": 2,
         "Low Priority": 1,
       };
 
-      const search =
-        searchQuery
-          .toLowerCase()
-          .trim();
+      const safeIssues = Array.isArray(issues) ? issues : [];
 
-      return issues
-        .filter(
-          (issue) =>
-            !search ||
-            issue.title
-              ?.toLowerCase()
-              .includes(search) ||
-            issue.zip_code
-              ?.toLowerCase()
-              .includes(search) ||
-            issue.category
-              ?.toLowerCase()
-              .includes(search)
-        )
-        .sort(
-          (a, b) =>
-            ((weights[
-              b.urgency
-            ] || 0) -
-              (weights[
-                a.urgency
-              ] || 0)) *
-              100 +
-            ((b.upvotes ?? 0) -
-              (a.upvotes ?? 0))
-        );
-    }, [
-      issues,
-      searchQuery,
-    ]);
-
-  const stats = useMemo(() => {
-    const total =
-      issues.length;
-
-    const resolved =
-      issues.filter(
-        (issue) =>
-          issue.status ===
-          "Resolved"
-      ).length;
-
-    const inProgress =
-      issues.filter(
-        (issue) =>
-          issue.status ===
-          "In Progress"
-      ).length;
-
-    return {
-      total,
-      inProgress,
-      resolved,
-      rate:
-        total > 0
-          ? Math.round(
-              (resolved /
-                total) *
-                100
-            )
-          : 0,
-    };
-  }, [issues]);
+      return [...safeIssues].sort(
+        (a, b) => {
+          const uA = (a.urgency as IssueUrgency) || "Medium Baseline";
+          const uB = (b.urgency as IssueUrgency) || "Medium Baseline";
+          return (weights[uB] || 2) - (weights[uA] || 2);
+        }
+      );
+    }, [issues]);
 
   return (
-    <div className="flex min-h-screen flex-col text-[#17211d]">
-      <nav className="sticky top-0 z-50 border-b border-[#cbd5cc] bg-[#f3f1ec]/95 text-[#17211d] shadow-[0_4px_20px_rgba(23,33,29,0.05)] backdrop-blur">
-        <div className="mx-auto flex min-h-[4.5rem] w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-5">
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#123b2a] text-sm font-black text-[#f3f1ec]">
-                S
-              </span>
-
-              <span className="text-xl font-black tracking-[-0.04em]">
-                STANCE
-              </span>
+    <main className="min-h-screen bg-[#fcfbf9] text-neutral-900">
+      {/* Header / Navbar */}
+      <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl flex-col items-stretch gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 lg:px-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-900 text-white font-extrabold tracking-wider shadow-sm">
+              ST
             </div>
-
-            <div className="hidden items-center gap-2 border border-[#cbd5cc] bg-[#e9e7e0] px-3 py-2 sm:flex">
-              <span className="h-2 w-2 rounded-full bg-[#2f7d5b]" />
-
-              <span className="text-xs font-bold capitalize text-[#365444]">
-                {currentRole} workspace
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              disabled={!authenticatedUser}
-              title={
-                authenticatedUser
-                  ? "Create a civic report"
-                  : "Sign in to create a civic report"
-              }
-              onClick={() => {
-                setConfirmationMessage("");
-                setFormError("");
-                setIsOpen(true);
-              }}
-              className="flex items-center gap-2 rounded-lg bg-[#d89542] px-4 py-2 text-sm font-bold text-[#17211d] shadow-[0_3px_0_#b7732d] transition hover:-translate-y-0.5 hover:bg-[#e2a351] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
-            >
-              <Plus className="h-4 w-4" />
-              New report
-            </button>
-
-            <AuthPanel
-              onUserChange={
-                handleUserChange
-              }
-            />
-          </div>
-        </div>
-      </nav>
-
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:py-12">
-        {confirmationMessage && (
-          <div
-            role="status"
-            className="mb-6 border border-[#a9c8b3] bg-[#e5f0e7] px-4 py-3 text-sm font-semibold text-[#1e5b3d]"
-          >
-            {confirmationMessage}
-          </div>
-        )}
-
-        {actionError && (
-          <div
-            role="alert"
-            className="mb-6 border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"
-          >
-            {actionError}
-          </div>
-        )}
-
-    
-
-        {currentRole === "resident" && (
-          <ResidentPortal
-            issues={mapFilteredIssues}
-            initiatives={initiatives}
-            mapCenter={mapCenter}
-            stats={stats}
-            handleUpvote={handleUpvote}
-          />
-        )}
-
-        {currentRole === "representative" && (
-          <RepresentativePortal
-            campaignAnalytics={
-              campaignAnalytics
-            }
-          />
-        )}
-
-        {currentRole === "admin" && (
-          <AdminPortal
-            workOrders={workOrders}
-            riskAnalytics={
-              riskAnalytics
-            }
-          />
-        )}
-
-        <div className="mt-14 border-t border-[#cbd5cc] pt-10">
-          <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#b7732d]">
-                Public record
-              </p>
-
-              <h3 className="text-2xl font-black tracking-[-0.04em] text-[#17211d]">
-                Reports in your community
-              </h3>
-
-              <p className="mt-1 text-sm text-[#647168]">
-                Search, support, and follow the issues
-                neighbors have raised.
-              </p>
-            </div>
-
-            <div className="relative w-full max-w-xs">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-
-              <input
-                className="w-full rounded-lg border border-[#cbd5cc] bg-[#fffefa] py-2.5 pl-9 pr-4 text-sm shadow-sm outline-none transition focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]"
-                placeholder="Filter by ZIP, category, keywords..."
-                value={searchQuery}
-                onChange={(event) => {
-                  setIssuePage(0);
-                  setSearchQuery(
-                    event.target.value
-                  );
-                }}
-              />
+              <h1 className="text-lg font-black tracking-tight text-neutral-900">STANCE</h1>
+              <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-widest">NYC Civic Media & Intelligence</p>
             </div>
           </div>
-
-          <div className="space-y-4">
-            {loading && (
-              <div className="animate-pulse border border-[#cbd5cc] bg-[#fffefa] p-8 text-sm text-[#647168]">
-                Loading community reports...
-              </div>
-            )}
-
-            {!loading &&
-              sortedIssues.length === 0 && (
-                <div className="border border-dashed border-[#aebbb1] bg-[#fffefa]/60 p-12 text-center">
-                  <p className="text-sm font-bold text-[#17211d]">
-                    No reports found
-                  </p>
-
-                  <p className="mt-1 text-sm text-[#647168]">
-                    Try another search or be the first to
-                    report an issue here.
-                  </p>
-                </div>
-              )}
-
-            {issuesError && (
-              <div role="alert" className="border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
-                {issuesError}
-              </div>
-            )}
-
-            {sortedIssues.map(
-              (issue) => (
-                <IssueCard
-                  key={issue.id}
-                  issue={issue}
-                  currentRole={
-                    currentRole
-                  }
-                  ownerId={authenticatedUser?.id}
-                  onUpvote={
-                    handleUpvote
-                  }
-                  onUpdateStatus={
-                    handleUpdateStatus
-                  }
-                  onStartEditing={
-                    startEditing
-                  }
-                  onDelete={
-                    handleDeleteIssue
-                  }
-                  onAddReply={
-                    handleAddReply
-                  }
-                />
-              )
-            )}
-
-            {!loading &&
-              (issuePage > 0 ||
-                hasMoreIssues) && (
-                <div className="flex items-center justify-between border-t border-[#cbd5cc] pt-4">
-                  <button
-                    type="button"
-                    disabled={
-                      issuePage === 0
-                    }
-                    onClick={() =>
-                      setIssuePage(
-                        (page) =>
-                          Math.max(
-                            0,
-                            page - 1
-                          )
-                      )
-                    }
-                    className="border border-[#cbd5cc] bg-[#fffefa] px-3 py-2 text-xs font-bold text-[#647168] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Previous
-                  </button>
-
-                  <span className="text-xs font-bold text-[#647168]">
-                    Page{" "}
-                    {issuePage + 1}
-                  </span>
-
-                  <button
-                    type="button"
-                    disabled={
-                      !hasMoreIssues
-                    }
-                    onClick={() =>
-                      setIssuePage(
-                        (page) =>
-                          page + 1
-                      )
-                    }
-                    className="border border-[#cbd5cc] bg-[#123b2a] px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
+          <div className="flex items-center justify-end gap-2 sm:gap-4">
+            <Link
+              href="/districts"
+              className="whitespace-nowrap rounded-xl px-3 py-2 text-xs font-bold text-neutral-700 transition hover:bg-neutral-100 hover:text-emerald-800"
+            >
+              Districts
+            </Link>
+            <button
+              onClick={() => setIsOpen(true)}
+              className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl bg-neutral-900 px-4 py-2 text-xs font-bold text-white shadow-md transition-transform hover:bg-neutral-800 active:scale-95"
+            >
+              <Plus className="h-4 w-4" /> Report Issue
+            </button>
+            <AuthPanel onUserChange={handleUserChange} />
           </div>
         </div>
+      </header>
 
-        {isOpen && (
-          <ReportModal
-            isEditing={isEditing}
-            form={form}
-            setForm={setForm}
-            addressInput={addressInput}
-            districtName={selectedDistrictName}
-            suggestions={suggestions}
-            locating={locating}
-            formError={formError}
-            submitting={submitting}
-            locationError={locationError}
-            onAddressSearch={
-              handleNYCAddressSearch
-            }
-            onSelectSuggestion={(
-              suggestion
-            ) => {
-              setForm((prev) => ({
-                ...prev,
-                zip_code:
-                  suggestion.zip,
-              }));
+      {/* Main Content Dashboard */}
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <section className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
+          <div className="contents lg:col-span-7 lg:flex lg:flex-col lg:gap-6">
+            <section className="order-1 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm lg:order-none">
+              <div className="flex items-center justify-between gap-4 border-b border-neutral-100 px-4 py-3 sm:px-5">
+                <div>
+                  <h2 className="text-sm font-extrabold tracking-tight text-neutral-900">Live district map</h2>
+                  <p className="mt-0.5 text-xs text-neutral-500">Select a marker or report to explore an issue.</p>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-800">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                  Live
+                </span>
+              </div>
+              <div className="h-[380px] sm:h-[480px]">
+                <IncidentMap
+                  issues={mapFilteredIssues}
+                  centerCoordinates={mapCenter}
+                  zoom={mapZoom}
+                  focusRequest={mapFocusRequest}
+                  onUpvote={handleUpvote}
+                  onSelectIssue={focusIncident}
+                />
+              </div>
+            </section>
+            <div className="order-3 lg:order-none">
+              {currentRole === "admin" && (
+                <AdminPortal
+                  workOrders={workOrders}
+                  riskAnalytics={riskAnalytics}
+                />
+              )}
+              {currentRole === "representative" && (
+                <RepresentativePortal campaignAnalytics={campaignAnalytics} />
+              )}
+              {currentRole === "resident" && (
+                <ResidentPortal
+                  initiatives={initiatives}
+                  issues={issues}
+                />
+              )}
+            </div>
+          </div>
 
-              setAddressInput(
-                suggestion.display_name
+          <div className="order-2 space-y-5 lg:order-none lg:col-span-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-extrabold tracking-tight text-neutral-900">Community incident stream</h2>
+                <p className="mt-0.5 text-xs text-neutral-500">Recent reports, priorities, and updates</p>
+              </div>
+              <div className="relative w-full sm:max-w-64">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-neutral-400" />
+                <input
+                  type="text"
+                  placeholder="Search district or keyword..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border border-neutral-200 bg-white py-2 pl-9 pr-4 text-xs font-medium text-neutral-800 shadow-sm focus:border-neutral-900 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((n) => (
+                  <div key={n} className="h-32 w-full animate-pulse rounded-2xl bg-neutral-200/60" />
+                ))}
+              </div>
+            ) : sortedIssues.length === 0 ? (
+              <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-neutral-300 bg-white p-6 text-center">
+                <p className="text-sm font-semibold text-neutral-600">No civic reports found.</p>
+                <p className="text-xs text-neutral-400 mt-1">Be the first to log a municipal issue in your neighborhood.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {sortedIssues.map((issue) => (
+                  <IssueCard
+                    key={issue.id}
+                    issue={issue}
+                    currentRole={currentRole}
+                    onSelectIssue={focusIncident}
+                    onUpvote={handleUpvote}
+                    onUpdateStatus={handleUpdateStatus}
+                    onDelete={handleDeleteIssue}
+                    onAddReply={handleAddReply}
+                    onStartEditing={startEditing}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+        </section>
+      </div>
+
+      {/* Report Modal */}
+      {isOpen && (
+        <ReportModal
+          isEditing={isEditing}
+          form={form}
+          setForm={setForm}
+          formError={formError}
+          addressInput={addressInput}
+          districtName={selectedDistrictName}
+          locating={locating}
+          suggestions={suggestions}
+          locationError={locationError}
+          submitting={submitting}
+          onClose={() => closeModal(false)}
+          onSubmit={handleFormSubmit}
+          onAddressSearch={handleNYCAddressSearch}
+          onUseMyLocation={handleUseMyLocation}
+          onSelectSuggestion={(suggestion) => {
+            setAddressInput(suggestion.display_name);
+            setSuggestions([]);
+            if (
+              typeof suggestion.lat === "number" &&
+              Number.isFinite(suggestion.lat) &&
+              typeof suggestion.lon === "number" &&
+              Number.isFinite(suggestion.lon)
+            ) {
+              const coordinates: [number, number] = [
+                suggestion.lat,
+                suggestion.lon,
+              ];
+              setSelectedLocation(coordinates);
+              setMapCenter(coordinates);
+              setLocationError("");
+              void resolveDistrictForPoint(
+                suggestion.lat,
+                suggestion.lon,
               );
-
-              if (
-                suggestion.lat !== undefined &&
-                suggestion.lon !== undefined
-              ) {
-                const coordinates: [number, number] = [
-                  suggestion.lat,
-                  suggestion.lon,
-                ];
-                setSelectedLocation(coordinates);
-                setMapCenter(coordinates);
-                void resolveDistrictForPoint(
-                  suggestion.lat,
-                  suggestion.lon,
-                );
-              }
-
-              setSuggestions([]);
-
-              if (
-                suggestion.lat !==
-                  undefined &&
-                suggestion.lon !==
-                  undefined
-              ) {
-                setMapCenter([
-                  suggestion.lat,
-                  suggestion.lon,
-                ]);
-              }
-            }}
-            onClose={closeModal}
-            onSubmit={handleFormSubmit}
-            onUseMyLocation={
-              handleUseMyLocation
+            } else {
+              setSelectedLocation(null);
+              setLocationError(
+                "This address result does not include a usable location. Please choose another result.",
+              );
             }
-          />
-        )}
-      </main>
-    </div>
+            if (suggestion.zip) {
+              setForm((prev) => ({ ...prev, zip_code: suggestion.zip }));
+            }
+          }}
+        />
+      )}
+
+      {/* Global Confirmation / Toast Messages */}
+      {confirmationMessage && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-neutral-900 px-5 py-3 text-xs font-bold text-white shadow-2xl flex items-center gap-3">
+          <span>✓ {confirmationMessage}</span>
+          <button onClick={() => setConfirmationMessage("")} className="text-neutral-400 hover:text-white">✕</button>
+        </div>
+      )}
+    </main>
   );
 }

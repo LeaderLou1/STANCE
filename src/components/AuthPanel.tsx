@@ -54,7 +54,7 @@ export function AuthPanel({ onUserChange }: AuthPanelProps) {
   return (
     <div className="flex items-center gap-2">
       {authMessage && (
-        <Link href="/auth" role="status" className="text-xs font-semibold text-[#a33d2f] underline">
+        <Link href="/auth" role="status" title={authMessage} className="max-w-24 truncate text-xs font-semibold text-[#a33d2f] underline sm:max-w-none">
           {authMessage}
         </Link>
       )}
@@ -66,7 +66,7 @@ export function AuthPanel({ onUserChange }: AuthPanelProps) {
           <button
             type="button"
             onClick={handleSignOut}
-            className="border border-[#cbd5cc] bg-[#fffefa] px-3 py-2 text-xs font-bold text-[#263b48] transition hover:bg-[#e8edef]"
+              className="whitespace-nowrap border border-[#cbd5cc] bg-[#fffefa] px-3 py-2 text-xs font-bold text-[#263b48] transition hover:bg-[#e8edef]"
           >
             Sign out
           </button>
@@ -74,7 +74,7 @@ export function AuthPanel({ onUserChange }: AuthPanelProps) {
       ) : (
         <Link
           href="/auth"
-          className="border border-[#cbd5cc] bg-[#fffefa] px-3 py-2 text-xs font-bold text-[#263b48] transition hover:bg-[#e8edef]"
+          className="whitespace-nowrap border border-[#cbd5cc] bg-[#fffefa] px-3 py-2 text-xs font-bold text-[#263b48] transition hover:bg-[#e8edef]"
         >
           Sign in / Sign up
         </Link>
