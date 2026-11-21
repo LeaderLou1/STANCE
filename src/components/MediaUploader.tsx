@@ -1,8 +1,17 @@
 
 "use client";
 
-import React, { useRef, useState } from "react";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  ImagePlus,
+  Loader2,
+  X,
+  CheckCircle2,
+} from "lucide-react";
 
 interface MediaUploaderProps {
   onUploadComplete: (url: string) => void;
@@ -31,6 +40,15 @@ export function MediaUploader({
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
+
+  // Revoke temporary browser preview URLs when replaced or unmounted.
+  useEffect(() => {
+    if (!preview) return;
+
+    return () => {
+      URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
 
   const handleMediaUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -62,9 +80,20 @@ export function MediaUploader({
       const response = await fetch("/api/reports/media", {
         method: "POST",
         body: formData,
+        cache: "no-store",
       });
 
-      const result: UploadResponse = await response.json();
+      let result: UploadResponse;
+
+      try {
+        result = (await response.json()) as UploadResponse;
+      } catch {
+        throw new Error(
+          response.status === 404
+            ? "Image uploads are not available yet."
+            : "The server returned an invalid upload response."
+        );
+      }
 
       if (!response.ok) {
         throw new Error(
@@ -72,20 +101,22 @@ export function MediaUploader({
         );
       }
 
-      const uploadedPath = result.path || result.url;
+      const uploadedPath = result.url || result.path;
 
-      if (!uploadedPath) {
-        throw new Error("The server did not return an uploaded image path.");
+      if (
+        typeof uploadedPath !== "string" ||
+        !uploadedPath.trim()
+      ) {
+        throw new Error(
+          "The server did not return an uploaded image path."
+        );
       }
 
       const previewUrl = URL.createObjectURL(file);
 
-      setPreview((previous) => {
-        if (previous) URL.revokeObjectURL(previous);
-        return previewUrl;
-      });
-
+      setPreview(previewUrl);
       setFileName(file.name);
+
       onUploadComplete(uploadedPath);
     } catch (uploadError) {
       const message =
@@ -105,80 +136,138 @@ export function MediaUploader({
   };
 
   const clearSelection = () => {
-    if (preview) {
-      URL.revokeObjectURL(preview);
-    }
+    if (uploading) return;
 
     setPreview(null);
     setFileName("");
     setError("");
+
     onUploadComplete("");
+
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
   };
 
   return (
-    <div className="w-full space-y-2">
-      {preview ? (
-        <div className="relative overflow-hidden rounded-xl border border-[#d5ded5] bg-[#f6f7f2]">
-          <img
-            src={preview}
-            alt={`Preview of ${fileName}`}
-            className="h-48 w-full object-cover"
-          />
+    <div className="w-full min-w-0 space-y-3">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="sr-only"
+        onChange={handleMediaUpload}
+        disabled={uploading}
+        aria-label="Choose an image to attach"
+      />
 
-          <div className="flex items-center justify-between gap-3 px-3 py-2">
-            <p className="truncate text-xs font-medium text-[#365444]">
-              {fileName}
-            </p>
+      {preview ? (
+        <div className="overflow-hidden rounded-xl border border-[#d5ded5] bg-[#f6f7f2]">
+          <div className="relative">
+            <img
+              src={preview}
+              alt={`Preview of ${fileName}`}
+              className="max-h-64 min-h-40 w-full object-contain"
+            />
+
+            {uploading && (
+              <div
+                className="absolute inset-0 flex items-center justify-center bg-black/40"
+                role="status"
+                aria-live="polite"
+              >
+                <Loader2
+                  aria-hidden="true"
+                  className="h-8 w-8 animate-spin text-white"
+                />
+                <span className="sr-only">
+                  Uploading image
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex min-w-0 items-center justify-between gap-3 px-3 py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <CheckCircle2
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0 text-[#47745b]"
+              />
+
+              <p className="truncate text-xs font-semibold text-[#365444]">
+                {fileName}
+              </p>
+            </div>
 
             <button
               type="button"
               onClick={clearSelection}
               disabled={uploading}
               aria-label="Remove attached image"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#647168] hover:bg-[#e8eee9] disabled:opacity-50"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#647168] transition hover:bg-[#e8eee9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245b43] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <X className="h-4 w-4" />
+              <X
+                aria-hidden="true"
+                className="h-5 w-5"
+              />
             </button>
           </div>
         </div>
       ) : (
-        <label className="flex h-28 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#cbd5cc] bg-[#f8f9f5] transition hover:border-[#47745b] hover:bg-[#f0f5ef]">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#cbd5cc] bg-[#f8f9f5] px-4 py-5 text-center transition hover:border-[#47745b] hover:bg-[#f0f5ef] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245b43] disabled:cursor-not-allowed disabled:opacity-60"
+        >
           {uploading ? (
             <>
-              <Loader2 className="h-6 w-6 animate-spin text-[#47745b]" />
-              <span className="text-xs font-semibold text-[#647168]">
+              <Loader2
+                aria-hidden="true"
+                className="h-7 w-7 animate-spin text-[#47745b]"
+              />
+
+              <span className="text-sm font-semibold text-[#365444]">
                 Uploading image...
+              </span>
+
+              <span className="text-xs text-[#647168]">
+                Please wait
               </span>
             </>
           ) : (
             <>
-              <ImagePlus className="h-6 w-6 text-[#47745b]" />
+              <ImagePlus
+                aria-hidden="true"
+                className="h-7 w-7 text-[#47745b]"
+              />
 
-              <span className="text-xs font-bold text-[#365444]">
+              <span className="text-sm font-bold text-[#365444]">
                 Add a photo
               </span>
 
-              <span className="text-[10px] text-[#89938a]">
+              <span className="text-xs leading-5 text-[#647168]">
                 JPG, PNG, or WebP · Maximum 10 MB
               </span>
             </>
           )}
-
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="sr-only"
-            onChange={handleMediaUpload}
-            disabled={uploading}
-          />
-        </label>
+        </button>
       )}
 
       {error && (
-        <p role="alert" className="text-xs font-semibold text-red-700">
-          {error}
-        </p>
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3"
+        >
+          <X
+            aria-hidden="true"
+            className="mt-0.5 h-4 w-4 shrink-0 text-red-700"
+          />
+
+          <p className="break-words text-sm leading-5 text-red-800">
+            {error}
+          </p>
+        </div>
       )}
     </div>
   );

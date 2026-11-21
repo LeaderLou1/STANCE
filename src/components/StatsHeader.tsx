@@ -1,7 +1,6 @@
 
 "use client";
 
-import React from "react";
 import {
   ClipboardList,
   Clock,
@@ -49,30 +48,38 @@ export function StatsHeader({ stats }: StatsProps) {
   return (
     <section
       aria-label="Report statistics"
-      className="mb-8 grid grid-cols-2 gap-px overflow-hidden border border-[#cbd5cc] bg-[#cbd5cc] sm:grid-cols-4"
+      className="mb-6 grid w-full min-w-0 grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#cbd5cc] bg-[#cbd5cc] sm:mb-8 sm:grid-cols-4"
     >
       {cards.map((card) => {
         const Icon = card.icon;
 
         return (
-          <div
+          <article
             key={card.label}
-            className="flex items-center gap-3 bg-[#fffefa] p-4 sm:p-5"
+            aria-label={`${card.label}: ${card.value}`}
+            className="flex min-w-0 items-center gap-2 bg-[#fffefa] p-3 sm:gap-3 sm:p-5"
           >
-            <div className={`rounded-lg p-2.5 ${card.iconStyle}`}>
-              <Icon aria-hidden="true" className="h-5 w-5" />
+            <div
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:h-11 sm:w-11 ${card.iconStyle}`}
+            >
+              <Icon
+                aria-hidden="true"
+                className="h-4 w-4 sm:h-5 sm:w-5"
+              />
             </div>
 
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-[9px] font-bold uppercase leading-4 tracking-[0.08em] text-[#647168] sm:text-[10px] sm:tracking-[0.12em]">
                 {card.label}
               </p>
 
-              <p className="mt-1 text-2xl font-black tracking-[-0.04em] text-[#17211d]">
-                {card.value}
+              <p className="mt-1 text-xl font-black tabular-nums tracking-tight text-[#17211d] sm:text-2xl">
+                {Number.isFinite(card.value)
+                  ? card.value.toLocaleString()
+                  : "—"}
               </p>
             </div>
-          </div>
+          </article>
         );
       })}
     </section>

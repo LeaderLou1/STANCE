@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import type { FormEvent } from "react";
 import {
   MapPin,
   Search,
@@ -9,6 +10,7 @@ import {
   AlertCircle,
   Loader2,
   Building2,
+  RotateCcw,
 } from "lucide-react";
 
 interface GeosearchFeature {
@@ -31,24 +33,37 @@ interface DistrictResponse {
 
 interface GeosearchResponse {
   features?: GeosearchFeature[];
+  error?: string;
+}
+
+interface AddressResult {
+  address: string;
+  districtNumber: number;
+  districtName: string;
+  districtId: string;
+  lat: number;
+  lng: number;
+}
+
+function isValidNYCCoordinate(lat: number, lng: number): boolean {
+  // Broad NYC-area guard, not a substitute for polygon containment.
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= 40.45 &&
+    lat <= 40.95 &&
+    lng >= -74.3 &&
+    lng <= -73.65
+  );
 }
 
 export default function AddressSearch() {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{
-    address: string;
-    districtNumber: number;
-    districtName: string;
-    districtId: string;
-    lat: number;
-    lng: number;
-  } | null>(null);
+  const [result, setResult] = useState<AddressResult | null>(null);
 
-  const handleSearch = async (
-    event: React.FormEvent<HTMLFormElement>,
-  ) => {
+  const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const trimmedAddress = address.trim();
@@ -58,39 +73,46 @@ export default function AddressSearch() {
       return;
     }
 
+    if (loading) return;
+
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      // Step 1: Geocode the address.
+      // Step 1: Geocode the NYC address.
       const geosearchUrl = new URL(
         "/api/geosearch",
-        window.location.origin,
+        window.location.origin
       );
 
       geosearchUrl.searchParams.set(
         "text",
-        `${trimmedAddress}, New York City`,
+        `${trimmedAddress}, New York City`
       );
 
       const geosearchResponse = await fetch(
         geosearchUrl.toString(),
-        { cache: "no-store" },
+        {
+          cache: "no-store",
+        }
       );
 
-      if (!geosearchResponse.ok) {
-        throw new Error("Address lookup is temporarily unavailable.");
-      }
+      const geosearchData =
+        (await geosearchResponse.json()) as GeosearchResponse;
 
-      const geosearchData: GeosearchResponse =
-        await geosearchResponse.json();
+      if (!geosearchResponse.ok) {
+        throw new Error(
+          geosearchData.error ||
+            "Address lookup is temporarily unavailable."
+        );
+      }
 
       const features = geosearchData.features;
 
       if (!Array.isArray(features) || features.length === 0) {
         throw new Error(
-          "We couldn't find that address. Check the spelling and try again.",
+          "We couldn't find that address. Check the spelling and try again."
         );
       }
 
@@ -102,7 +124,7 @@ export default function AddressSearch() {
         coordinates.length < 2
       ) {
         throw new Error(
-          "The address result did not include valid coordinates.",
+          "The address result did not include valid coordinates."
         );
       }
 
@@ -111,35 +133,49 @@ export default function AddressSearch() {
       if (
         typeof lat !== "number" ||
         typeof lng !== "number" ||
-        !Number.isFinite(lat) ||
-        !Number.isFinite(lng)
+        !isValidNYCCoordinate(lat, lng)
       ) {
-        throw new Error("The address coordinates are invalid.");
+        throw new Error(
+          "That address does not appear to be within the New York City area. Please check the address."
+        );
       }
 
       // Step 2: Resolve the actual Council District using PostGIS.
-      const districtResponse = await fetch(
-        `/api/districts/resolve?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`,
-        { cache: "no-store" },
+      const districtUrl = new URL(
+        "/api/districts/resolve",
+        window.location.origin
       );
 
-      const districtData: DistrictResponse =
-        await districtResponse.json();
+      districtUrl.searchParams.set("lat", String(lat));
+      districtUrl.searchParams.set("lng", String(lng));
+
+      const districtResponse = await fetch(
+        districtUrl.toString(),
+        {
+          cache: "no-store",
+        }
+      );
+
+      const districtData =
+        (await districtResponse.json()) as DistrictResponse;
 
       if (!districtResponse.ok) {
         throw new Error(
           districtData.error ||
-            "We couldn't determine the Council District for this address.",
+            "We couldn't determine the Council District for this address."
         );
       }
 
       if (
-        !districtData.districtNumber ||
+        typeof districtData.districtNumber !== "number" ||
+        !Number.isInteger(districtData.districtNumber) ||
+        districtData.districtNumber < 1 ||
+        districtData.districtNumber > 51 ||
         !districtData.districtId ||
         !districtData.districtName
       ) {
         throw new Error(
-          "The district lookup returned incomplete information.",
+          "The district lookup returned incomplete or invalid information."
         );
       }
 
@@ -155,34 +191,46 @@ export default function AddressSearch() {
         lng,
       });
     } catch (err) {
+      console.error("Address district lookup failed:", err);
+
       setError(
         err instanceof Error
           ? err.message
-          : "Something went wrong. Please try again.",
+          : "Something went wrong. Please try again."
       );
     } finally {
       setLoading(false);
     }
   };
 
+  const resetSearch = () => {
+    setAddress("");
+    setError(null);
+    setResult(null);
+  };
+
   return (
-    <section className="mx-auto mt-10 w-full max-w-xl overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-      <div className="border-b border-neutral-100 bg-[#f2f7f2] px-6 py-6">
+    <section className="mx-auto mt-6 w-full min-w-0 max-w-xl overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm sm:mt-10">
+      {/* Header */}
+      <div className="border-b border-neutral-100 bg-[#f2f7f2] px-4 py-5 sm:px-6 sm:py-6">
         <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-[#245b43] shadow-sm">
-          <MapPin className="h-5 w-5" />
+          <MapPin
+            aria-hidden="true"
+            className="h-5 w-5"
+          />
         </div>
 
-        <h2 className="text-xl font-extrabold tracking-tight text-neutral-900">
+        <h2 className="text-xl font-extrabold tracking-tight text-neutral-900 sm:text-2xl">
           Find your Council District
         </h2>
 
         <p className="mt-2 text-sm leading-6 text-neutral-600">
-          Enter your NYC street address to identify the
-          City Council district responsible for your neighborhood.
+          Enter your NYC street address to identify the City Council
+          district responsible for your neighborhood.
         </p>
       </div>
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <form onSubmit={handleSearch} className="space-y-4">
           <div>
             <label
@@ -204,77 +252,114 @@ export default function AddressSearch() {
               placeholder="e.g. 250 Broadway, Manhattan"
               maxLength={200}
               autoComplete="street-address"
+              autoCapitalize="words"
+              spellCheck={false}
               required
-              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#245b43] focus:ring-2 focus:ring-[#245b43]/15"
+              disabled={loading}
+              className="min-h-12 w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-base text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-[#245b43] focus:ring-2 focus:ring-[#245b43]/15 disabled:bg-neutral-50 disabled:text-neutral-500"
             />
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#245b43] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#194a35] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={loading || !address.trim()}
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#245b43] px-4 py-3 text-sm font-bold text-white transition hover:bg-[#194a35] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245b43] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2
+                  aria-hidden="true"
+                  className="h-4 w-4 animate-spin"
+                />
                 Finding your district...
               </>
             ) : (
               <>
-                <Search className="h-4 w-4" />
+                <Search
+                  aria-hidden="true"
+                  className="h-4 w-4"
+                />
                 Find my district
               </>
             )}
           </button>
         </form>
 
+        {/* Error */}
         {error && (
           <div
             role="alert"
+            aria-live="assertive"
             className="mt-5 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4"
           >
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
-            <p className="text-sm leading-5 text-rose-800">
+            <AlertCircle
+              aria-hidden="true"
+              className="mt-0.5 h-5 w-5 shrink-0 text-rose-600"
+            />
+
+            <p className="min-w-0 break-words text-sm leading-6 text-rose-800">
               {error}
             </p>
           </div>
         )}
 
+        {/* Successful district lookup */}
         {result && (
           <div
+            role="status"
             aria-live="polite"
-            className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-5"
+            className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 sm:p-5"
           >
             <div className="flex items-center gap-2 text-sm font-bold text-emerald-800">
-              <CheckCircle2 className="h-4 w-4" />
+              <CheckCircle2
+                aria-hidden="true"
+                className="h-5 w-5 shrink-0"
+              />
               District successfully identified
             </div>
 
-            <p className="mt-3 text-xs font-medium text-emerald-700">
-              NYC COUNCIL DISTRICT
+            <p className="mt-4 text-xs font-bold uppercase tracking-wider text-emerald-700">
+              NYC Council District
             </p>
 
-            <p className="mt-1 text-3xl font-black tracking-tight text-emerald-950">
+            <p className="mt-1 text-4xl font-black tracking-tight text-emerald-950 sm:text-5xl">
               {result.districtNumber}
             </p>
 
-            <div className="mt-4 flex items-start gap-2 border-t border-emerald-200 pt-3">
-              <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
-              <div>
-                <p className="text-xs font-semibold text-emerald-900">
+            <div className="mt-4 flex min-w-0 items-start gap-3 border-t border-emerald-200 pt-4">
+              <Building2
+                aria-hidden="true"
+                className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700"
+              />
+
+              <div className="min-w-0">
+                <p className="break-words text-sm font-bold text-emerald-900">
                   {result.districtName}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-emerald-800">
+
+                <p className="mt-1 break-words text-sm leading-5 text-emerald-800">
                   {result.address}
                 </p>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={resetSearch}
+              className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
+            >
+              <RotateCcw
+                aria-hidden="true"
+                className="h-4 w-4"
+              />
+              Search another address
+            </button>
           </div>
         )}
 
-        <p className="mt-5 text-center text-xs leading-5 text-neutral-400">
-          District boundaries are determined using geographic
-          boundary data, not ZIP code estimates.
+        <p className="mt-5 text-center text-xs leading-5 text-neutral-500">
+          District boundaries are determined using geographic boundary
+          data, not ZIP code estimates.
         </p>
       </div>
     </section>
