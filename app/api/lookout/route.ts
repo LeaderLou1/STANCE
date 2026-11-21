@@ -14,6 +14,9 @@ export async function GET(request: Request) {
   }
 
   const apiKey = process.env.NYC_API_SUBSCRIPTION_KEY;
+  if (!apiKey) {
+    console.error("Lookout API error: NYC_API_SUBSCRIPTION_KEY is missing from environment variables.");
+  }
 
   const url = `https://api.nyc.gov/geoclient/v2/address?houseNumber=${encodeURIComponent(
     houseNumber
@@ -27,18 +30,31 @@ export async function GET(request: Request) {
         "Ocp-Apim-Subscription-Key": apiKey || "",
         Accept: "application/json",
       },
+      signal: AbortSignal.timeout(8000), // Prevent long-hanging requests
     });
 
     if (!response.ok) {
-      throw new Error("Geoclient lookup failed");
+      throw new Error(`Geoclient lookup failed with status ${response.status}`);
     }
 
     const data = await response.json();
-    const district = data.address?.cityCouncilDistrict;
+    
+    // Support both direct address property and nested results response wrapper
+    const district = 
+      data.address?.cityCouncilDistrict || 
+      data.results?.[0]?.response?.cityCouncilDistrict;
 
-    return NextResponse.json({ district });
-  } catch (error) {
-    console.error("District lookup failed:", error);
+    if (!district) {
+      return NextResponse.json(
+        { error: "Could not determine city council district for this address." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ district: Number(district) });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown lookup error";
+    console.error("District lookup failed:", errorMessage);
 
     return NextResponse.json(
       { error: "Internal Server Error" },

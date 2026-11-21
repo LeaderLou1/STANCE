@@ -1,49 +1,27 @@
+
 import { NextResponse } from "next/server";
-import {
-  createServerAdminClient,
-  getBearerToken,
-} from "@/src/lib/serverSupabase";
+import { createServerAdminClient } from "@/src/lib/serverSupabase";
+import { randomUUID } from "crypto";
 
-interface ReportBody {
-  title?: string;
-  description?: string;
-  category?: string;
-  zip_code?: string;
-  urgency?: string;
-  lat?: number | null;
-  lng?: number | null;
-  resolution_proof_url?: string | null;
+interface GuestReportPayload {
+  title?: unknown;
+  description?: unknown;
+  category?: unknown;
+  districtNumber?: unknown; // Ignored: district is resolved server-side.
+  lat?: unknown;
+  lng?: unknown;
+  photoUrl?: unknown;
+  reporterEmail?: unknown;
 }
 
-interface NYC311Enrichment {
-  count: number;
-  openCount: number;
-  categories: string[];
-  agencies: string[];
-  nearestDistanceMeters: number | null;
-  lastReportedAt: string | null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const NYC_311_ENDPOINT =
-  "https://data.cityofnewyork.us/resource/erm2-nwe9.json";
-
-const SEARCH_RADIUS_METERS = 1000;
-const MAX_311_RESULTS = 50;
-
-const EMPTY_311_ENRICHMENT: NYC311Enrichment = {
-  count: 0,
-  openCount: 0,
-  categories: [],
-  agencies: [],
-  nearestDistanceMeters: null,
-  lastReportedAt: null,
-};
-
-function isValidNYCCoordinates(
-  lat: number,
-  lng: number
-): boolean {
+function isValidNYCCoordinates(lat: number, lng: number): boolean {
   return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
     lat >= 40.4 &&
     lat <= 41.0 &&
     lng >= -74.3 &&
@@ -51,648 +29,240 @@ function isValidNYCCoordinates(
   );
 }
 
-function distanceMeters(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number
-): number {
-  const earthRadius = 6371000;
-
-  const lat1Rad = (lat1 * Math.PI) / 180;
-  const lat2Rad = (lat2 * Math.PI) / 180;
-
-  const deltaLat =
-    ((lat2 - lat1) * Math.PI) / 180;
-
-  const deltaLng =
-    ((lng2 - lng1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(lat1Rad) *
-      Math.cos(lat2Rad) *
-      Math.sin(deltaLng / 2) ** 2;
-
+function isValidEmail(email: string): boolean {
   return (
-    earthRadius *
-    2 *
-    Math.atan2(
-      Math.sqrt(a),
-      Math.sqrt(1 - a)
-    )
+    email.length <= 254 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   );
 }
 
-async function enrichWith311(
-  lat: number,
-  lng: number
-): Promise<NYC311Enrichment> {
-  const since = new Date();
+function getDistrictNumber(name: string): number | null {
+  const match = name.match(/^Council District (\d{1,2})$/i);
 
-  since.setDate(since.getDate() - 30);
+  if (!match) return null;
 
-  const formattedDateTime =
-    since.toISOString().split(".")[0];
+  const number = Number(match[1]);
 
-  const query = new URLSearchParams({
-    $select:
-      "unique_key,created_date,complaint_type,status,agency,latitude,longitude",
-
-    $where:
-      `within_circle(location,${lat},${lng},${SEARCH_RADIUS_METERS}) ` +
-      `AND created_date >= '${formattedDateTime}'`,
-
-    $order: "created_date DESC",
-
-    $limit: String(MAX_311_RESULTS),
-  });
-
-  try {
-    const upstream = await fetch(
-      `${NYC_311_ENDPOINT}?${query.toString()}`,
-      {
-        headers: {
-          Accept: "application/json",
-
-          ...(process.env.NYC_OPEN_DATA_APP_TOKEN
-            ? {
-                "X-App-Token":
-                  process.env.NYC_OPEN_DATA_APP_TOKEN.trim(),
-              }
-            : {}),
-        },
-
-        cache: "no-store",
-      }
-    );
-
-    if (!upstream.ok) {
-      console.error(
-        "311 enrichment failed:",
-        upstream.status
-      );
-
-      return EMPTY_311_ENRICHMENT;
-    }
-
-    const rows = (await upstream.json()) as Array<{
-      unique_key?: string;
-      created_date?: string;
-      complaint_type?: string;
-      status?: string;
-      agency?: string;
-      latitude?: string;
-      longitude?: string;
-    }>;
-
-    const categories = new Set<string>();
-    const agencies = new Set<string>();
-
-    let openCount = 0;
-
-    let nearestDistanceMeters:
-      | number
-      | null = null;
-
-    let lastReportedAt:
-      | string
-      | null = null;
-
-    for (const row of rows) {
-      if (row.complaint_type) {
-        categories.add(row.complaint_type);
-      }
-
-      if (row.agency) {
-        agencies.add(row.agency);
-      }
-
-      if (
-        row.status &&
-        !row.status
-          .toLowerCase()
-          .includes("closed")
-      ) {
-        openCount++;
-      }
-
-      if (
-        row.created_date &&
-        (!lastReportedAt ||
-          row.created_date > lastReportedAt)
-      ) {
-        lastReportedAt = row.created_date;
-      }
-
-      const rowLat = Number(row.latitude);
-      const rowLng = Number(row.longitude);
-
-      if (
-        Number.isFinite(rowLat) &&
-        Number.isFinite(rowLng)
-      ) {
-        const distance = distanceMeters(
-          lat,
-          lng,
-          rowLat,
-          rowLng
-        );
-
-        if (
-          nearestDistanceMeters === null ||
-          distance < nearestDistanceMeters
-        ) {
-          nearestDistanceMeters = distance;
-        }
-      }
-    }
-
-    return {
-      count: rows.length,
-
-      openCount,
-
-      categories: Array.from(
-        categories
-      ).slice(0, 10),
-
-      agencies: Array.from(
-        agencies
-      ).slice(0, 10),
-
-      nearestDistanceMeters,
-
-      lastReportedAt,
-    };
-  } catch (error) {
-    console.error(
-      "311 enrichment request failed:",
-      error
-    );
-
-    return EMPTY_311_ENRICHMENT;
-  }
+  return Number.isInteger(number) && number >= 1 && number <= 51
+    ? number
+    : null;
 }
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
-    /*
-     * Authenticate request.
-     */
-    const token = getBearerToken(request);
+    let rawBody: unknown;
 
-    if (!token) {
+    try {
+      rawBody = await request.json();
+    } catch {
       return NextResponse.json(
-        {
-          error:
-            "Authentication required.",
-        },
-        { status: 401 }
-      );
-    }
-
-    const supabase =
-      createServerAdminClient();
-
-    const {
-      data: { user },
-      error: userError,
-    } =
-      await supabase.auth.getUser(
-        token
-      );
-
-    if (userError || !user) {
-      return NextResponse.json(
-        {
-          error:
-            "Invalid authentication session.",
-        },
-        { status: 401 }
-      );
-    }
-
-    /*
-     * Parse request body.
-     */
-    const body =
-      (await request.json()) as ReportBody;
-
-    const title =
-      body.title?.trim() || "";
-
-    const description =
-      body.description?.trim() || "";
-
-    const category =
-      body.category?.trim() || "";
-
-    const zipCode =
-      body.zip_code?.trim() || "";
-
-    /*
-     * Validate title.
-     */
-    if (
-      title.length < 5 ||
-      title.length > 120
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Title must be 5 to 120 characters.",
-        },
+        { error: "Request body must contain valid JSON." },
         { status: 400 }
       );
     }
 
-    /*
-     * Validate description.
-     */
-    if (
-      description.length < 10 ||
-      description.length > 2000
-    ) {
+    if (!isRecord(rawBody)) {
       return NextResponse.json(
-        {
-          error:
-            "Description must be 10 to 2,000 characters.",
-        },
+        { error: "Invalid report payload." },
         { status: 400 }
       );
     }
 
-    /*
-     * Validate category.
-     */
-    if (!category) {
+    const body = rawBody as GuestReportPayload;
+
+    if (
+      typeof body.title !== "string" ||
+      typeof body.description !== "string" ||
+      typeof body.category !== "string" ||
+      typeof body.reporterEmail !== "string" ||
+      typeof body.lat !== "number" ||
+      typeof body.lng !== "number"
+    ) {
       return NextResponse.json(
-        {
-          error:
-            "Category is required.",
-        },
+        { error: "One or more required fields have invalid types." },
         { status: 400 }
       );
     }
 
-    /*
-     * Coordinates are the primary
-     * geographic identifier.
-     */
-    let lat: number | null = null;
-    let lng: number | null = null;
+    const title = body.title.trim();
+    const description = body.description.trim();
+    const category = body.category.trim();
+    const reporterEmail = body.reporterEmail.trim().toLowerCase();
+    const lat = body.lat;
+    const lng = body.lng;
 
-    if (
-      typeof body.lat === "number" &&
-      typeof body.lng === "number"
-    ) {
-      if (
-        !isValidNYCCoordinates(
-          body.lat,
-          body.lng
-        )
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "The report location must be within NYC.",
-          },
-          { status: 400 }
-        );
-      }
-
-      lat = body.lat;
-      lng = body.lng;
+    if (title.length < 5 || title.length > 120) {
+      return NextResponse.json(
+        { error: "Title must be 5 to 120 characters." },
+        { status: 400 }
+      );
     }
 
-    /*
-     * Basic rate limiting.
-     */
-    const forwardedFor =
-      request.headers.get(
-        "x-forwarded-for"
+    if (description.length < 10 || description.length > 2000) {
+      return NextResponse.json(
+        { error: "Description must be 10 to 2,000 characters." },
+        { status: 400 }
       );
+    }
 
-    const ipAddress =
-      forwardedFor
-        ?.split(",")[0]
-        ?.trim() || "unknown";
-
-    const userLimit =
-      await supabase.rpc(
-        "consume_report_rate_limit",
-        {
-          p_bucket_key:
-            `user:${user.id}`,
-
-          p_limit: 10,
-
-          p_window: "1 hour",
-        }
+    if (category.length < 2 || category.length > 80) {
+      return NextResponse.json(
+        { error: "Category must be 2 to 80 characters." },
+        { status: 400 }
       );
+    }
 
-    const ipLimit =
-      await supabase.rpc(
-        "consume_report_rate_limit",
-        {
-          p_bucket_key:
-            `ip:${ipAddress}`,
-
-          p_limit: 20,
-
-          p_window: "1 hour",
-        }
+    if (!isValidEmail(reporterEmail)) {
+      return NextResponse.json(
+        { error: "A valid email address is required for status tracking." },
+        { status: 400 }
       );
+    }
+
+    if (!isValidNYCCoordinates(lat, lng)) {
+      return NextResponse.json(
+        { error: "A valid NYC location coordinate is required." },
+        { status: 400 }
+      );
+    }
+
+    // Photo URLs are deliberately not accepted until the upload flow
+    // is restricted to trusted Supabase Storage objects.
+    if (
+      body.photoUrl !== undefined &&
+      body.photoUrl !== null &&
+      typeof body.photoUrl !== "string"
+    ) {
+      return NextResponse.json(
+        { error: "Invalid photo reference." },
+        { status: 400 }
+      );
+    }
 
     if (
-      userLimit.error ||
-      ipLimit.error
+      typeof body.photoUrl === "string" &&
+      body.photoUrl.trim().length > 0
     ) {
+      return NextResponse.json(
+        { error: "Photo uploads are not enabled for this endpoint yet." },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createServerAdminClient();
+
+    // Resolve the district using trusted geographic boundaries.
+    const { data: districtId, error: districtLookupError } =
+      await supabase.rpc("resolve_district_for_point", {
+        p_lat: lat,
+        p_lng: lng,
+      });
+
+    if (districtLookupError) {
       console.error(
-        "Rate-limit check failed:",
-        userLimit.error ||
-          ipLimit.error
+        "District resolution failed:",
+        districtLookupError.message
       );
 
       return NextResponse.json(
-        {
-          error:
-            "Report protection is temporarily unavailable.",
-        },
+        { error: "Unable to determine the council district for this location." },
         { status: 503 }
       );
     }
 
-    if (
-      !userLimit.data ||
-      !ipLimit.data
-    ) {
+    if (typeof districtId !== "string") {
       return NextResponse.json(
-        {
-          error:
-            "Report limit reached. Please try again later.",
-        },
-        { status: 429 }
+        { error: "This location could not be matched to an NYC council district." },
+        { status: 422 }
       );
     }
 
-    /*
-     * Duplicate detection.
-     */
-    const {
-      data: similarIssues,
-      error: duplicateError,
-    } =
-      await supabase.rpc(
-        "find_similar_issues_v2",
-        {
-          p_title: title,
-          p_zip_code: zipCode || null,
-          p_category: category,
-          p_limit: 3,
-        }
-      );
+    const { data: district, error: districtError } = await supabase
+      .from("districts")
+      .select("id, name, jurisdiction")
+      .eq("id", districtId)
+      .eq("jurisdiction", "New York City")
+      .single();
 
-    if (duplicateError) {
+    if (districtError || !district) {
       console.error(
-        "Duplicate check failed:",
-        duplicateError
+        "Resolved district record unavailable:",
+        districtError?.message
       );
 
       return NextResponse.json(
-        {
-          error:
-            "Duplicate check is temporarily unavailable.",
-        },
+        { error: "Unable to verify the council district for this location." },
         { status: 503 }
       );
     }
 
-    if (
-      similarIssues &&
-      similarIssues.length > 0
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "A similar report already exists.",
+    const districtNumber = getDistrictNumber(district.name);
 
-          duplicates:
-            similarIssues,
-        },
-        { status: 409 }
+    if (districtNumber === null) {
+      console.error("Unexpected district name:", district.name);
+
+      return NextResponse.json(
+        { error: "The matched district record is not configured correctly." },
+        { status: 503 }
       );
     }
 
-    /*
-     * Resolve council district
-     * using coordinates first.
-     */
-    let districtId:
-      | string
-      | null = null;
+    // Generate a cryptographically random status token.
+    // Store only its SHA-256 hash once the status lookup endpoint
+    // and schema migration are implemented.
+    const statusToken = randomUUID();
 
-    if (
-      lat !== null &&
-      lng !== null
-    ) {
-      const {
-        data: spatialDistrict,
-        error: spatialError,
-      } =
-        await supabase.rpc(
-          "resolve_district_for_point",
-          {
-            p_lat: lat,
-            p_lng: lng,
-          }
-        );
+    // Current schema stores status_token as UUID, so this inserts
+    // the token temporarily. Do not expose it until status access
+    // is protected by a complete token-verification workflow.
+    const { data: report, error: reportError } = await supabase
+      .from("reports")
+      .insert({
+        title,
+        description,
+        category,
+        district_number: districtNumber,
+        lat,
+        lng,
+        photo_url: null,
+        reporter_email: reporterEmail,
+        status: "Pending Review",
+        status_token: statusToken,
+      })
+      .select("id, status")
+      .single();
 
-      if (spatialError) {
-        console.error(
-          "Spatial district resolution failed:",
-          spatialError
-        );
-      } else {
-        districtId =
-          spatialDistrict || null;
-      }
+    if (reportError || !report) {
+      console.error(
+        "Report creation failed:",
+        reportError?.message
+      );
+
+      return NextResponse.json(
+        { error: "Unable to save your report. Please try again." },
+        { status: 500 }
+      );
     }
 
-    /*
-     * ZIP is only a fallback
-     * for district resolution.
-     */
-    if (
-      !districtId &&
-      zipCode
-    ) {
-      const {
-        data: zipDistrict,
-        error: districtError,
-      } =
-        await supabase.rpc(
-          "resolve_district_for_zip",
-          {
-            p_zip_code: zipCode,
-          }
-        );
-
-      if (districtError) {
-        console.error(
-          "ZIP district resolution failed:",
-          districtError
-        );
-      } else {
-        districtId =
-          zipDistrict || null;
-      }
-    }
-
-    /*
-     * 311 geographic enrichment.
-     *
-     * This stays server-side.
-     * The user never directly interacts
-     * with the 311 API.
-     */
-    let nearby311 =
-      EMPTY_311_ENRICHMENT;
-
-    if (
-      lat !== null &&
-      lng !== null
-    ) {
-      nearby311 =
-        await enrichWith311(
-          lat,
-          lng
-        );
-    }
-
-    /*
-     * Store civic intelligence as JSONB.
-     */
-    const civicContext = {
-      version: 1,
-
-      generatedAt:
-        new Date().toISOString(),
-
-      geography: {
-        latitude: lat,
-
-        longitude: lng,
-
-        districtId,
-
-        zipCode:
-          zipCode || null,
-      },
-
-      "311": {
-        nearbyCount:
-          nearby311.count,
-
-        openCount:
-          nearby311.openCount,
-
-        categories:
-          nearby311.categories,
-
-        agencies:
-          nearby311.agencies,
-
-        nearestDistanceMeters:
-          nearby311.nearestDistanceMeters,
-
-        lastReportedAt:
-          nearby311.lastReportedAt,
-
-        searchRadiusMeters:
-          SEARCH_RADIUS_METERS,
-
-        lookbackDays: 30,
-      },
-    };
-
-    /*
-     * TEMPORARY DEBUG LOG.
-     *
-     * This proves the new submission route
-     * generated civic_context before insertion.
-     */
-    /*
-     * Insert the issue.
-     */
-    const {
-      data,
-      error,
-    } =
-      await supabase
-        .from("issues")
-        .insert({
-          title,
-
-          description,
-
-          category,
-
-          zip_code:
-            zipCode || null,
-
-          urgency:
-            body.urgency ||
-            "Medium Baseline",
-
-          resolution_proof_url:
-            body.resolution_proof_url ||
-            null,
-
-          lat,
-
-          lng,
-
-          status: "Submitted",
-
-          reporter_id:
-            user.id,
-
-          district_id:
-            districtId,
-
-          civic_context:
-            civicContext,
-        })
-        .select("id")
-        .single();
-
-    if (error) {
-      throw error;
-    }
-
-    /*
-     * Return created issue ID.
-     */
     return NextResponse.json(
       {
-        id: data.id,
+        success: true,
+        reportId: report.id,
+        status: report.status,
+        districtNumber,
+        message:
+          "Your report has been received by STANCE and is pending review. It has not been sent to an official.",
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(
-      "Issue API error:",
-      error
+      "Guest report submission failed:",
+      error instanceof Error ? error.message : error
     );
 
     return NextResponse.json(
-      {
-        error: "Unable to submit report. Please try again or contact support.",
-      },
+      { error: "Unable to submit report. Please try again later." },
       { status: 500 }
     );
   }

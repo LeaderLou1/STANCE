@@ -1,31 +1,90 @@
+
+import "server-only";
+
 import { createClient } from "@supabase/supabase-js";
 
-export function createServerAdminClient() {
+function getSupabaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRoleKey) {
-    throw new Error("Missing server Supabase configuration.");
+
+  if (!url) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL.");
   }
-  return createClient(url, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+
+  return url;
 }
 
-export function createServerUserClient(accessToken: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    throw new Error("Missing public Supabase configuration.");
+function getAnonKey(): string {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!key) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY.");
   }
-  return createClient(url, anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    global: {
-      headers: { Authorization: `Bearer ${accessToken}` },
+
+  return key;
+}
+
+/**
+ * Administrative client.
+ *
+ * Server-only. Uses elevated credentials that bypass RLS.
+ * Every caller must independently enforce authentication,
+ * authorization, and input validation.
+ */
+export function createServerAdminClient() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceRoleKey) {
+    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY.");
+  }
+
+  return createClient(getSupabaseUrl(), serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
     },
   });
 }
 
-export function getBearerToken(request: Request) {
-  const value = request.headers.get("authorization");
-  return value?.replace(/^Bearer\s+/i, "") || null;
+/**
+ * User-scoped client for API routes using explicit Bearer tokens.
+ *
+ * Always verify the token with supabase.auth.getUser(token)
+ * before trusting the authenticated user.
+ */
+export function createServerUserClient(accessToken: string) {
+  const token = accessToken.trim();
+
+  if (!token) {
+    throw new Error("An access token is required.");
+  }
+
+  return createClient(getSupabaseUrl(), getAnonKey(), {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  });
+}
+
+/**
+ * Extracts a Bearer token from an incoming HTTP request.
+ * Returns null for missing or malformed authorization headers.
+ */
+export function getBearerToken(request: Request): string | null {
+  const authorization = request.headers.get("authorization");
+
+  if (!authorization) {
+    return null;
+  }
+
+  const match = authorization.trim().match(/^Bearer\s+(\S+)$/i);
+
+  return match?.[1] ?? null;
 }

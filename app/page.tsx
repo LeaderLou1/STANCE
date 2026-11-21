@@ -25,6 +25,7 @@ import dynamic from "next/dynamic";
 
 // Portal layers
 import { ResidentPortal } from "@/src/components/portals/ResidentPortal";
+import { MyReportsPanel } from "@/src/components/MyReportsPanel";
 import { RepresentativePortal } from "@/src/components/portals/RepresentativePortal";
 import { AdminPortal } from "@/src/components/portals/AdminPortal";
 
@@ -56,6 +57,9 @@ const IncidentMap = dynamic(
     ),
   }
 );
+
+// MVP: official-facing tools are parked. Set NEXT_PUBLIC_SHOW_OFFICIAL_TOOLS=true to restore them.
+const SHOW_OFFICIAL_TOOLS = process.env.NEXT_PUBLIC_SHOW_OFFICIAL_TOOLS === "true";
 
 export interface WorkOrderWithIssue {
   id: string;
@@ -534,7 +538,7 @@ export default function Home() {
     }
   }, [issuePage, searchQuery]);
 
-  const fetchInitiatives =
+  const fetchInitiativesRaw =
     useCallback(async () => {
       try {
         const {
@@ -565,7 +569,7 @@ export default function Home() {
       }
     }, []);
 
-  const fetchWorkOrders =
+  const fetchWorkOrdersRaw =
     useCallback(async () => {
       try {
         const {
@@ -619,7 +623,7 @@ export default function Home() {
       }
     }, []);
 
-  const fetchRiskAnalytics =
+  const fetchRiskAnalyticsRaw =
     useCallback(async () => {
       try {
         const {
@@ -673,7 +677,7 @@ export default function Home() {
       }
     }, []);
 
-  const fetchCampaignIntelligence =
+  const fetchCampaignIntelligenceRaw =
     useCallback(async () => {
       try {
         const {
@@ -719,6 +723,23 @@ export default function Home() {
         );
       }
     }, []);
+
+  const fetchInitiatives = useCallback(
+    () => (SHOW_OFFICIAL_TOOLS ? fetchInitiativesRaw() : Promise.resolve()),
+    [fetchInitiativesRaw],
+  );
+  const fetchWorkOrders = useCallback(
+    () => (SHOW_OFFICIAL_TOOLS ? fetchWorkOrdersRaw() : Promise.resolve()),
+    [fetchWorkOrdersRaw],
+  );
+  const fetchRiskAnalytics = useCallback(
+    () => (SHOW_OFFICIAL_TOOLS ? fetchRiskAnalyticsRaw() : Promise.resolve()),
+    [fetchRiskAnalyticsRaw],
+  );
+  const fetchCampaignIntelligence = useCallback(
+    () => (SHOW_OFFICIAL_TOOLS ? fetchCampaignIntelligenceRaw() : Promise.resolve()),
+    [fetchCampaignIntelligenceRaw],
+  );
 
   useEffect(() => {
     const timeoutId =
@@ -1446,7 +1467,7 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-lg font-black tracking-tight text-neutral-900">STANCE</h1>
-              <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-widest">NYC Civic Media & Intelligence</p>
+              <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-widest">Report it. Get it seen.</p>
             </div>
           </div>
           <div className="flex items-center justify-end gap-2 sm:gap-4">
@@ -1494,16 +1515,18 @@ export default function Home() {
               </div>
             </section>
             <div className="order-3 lg:order-none">
-              {currentRole === "admin" && (
+              {SHOW_OFFICIAL_TOOLS && currentRole === "admin" && (
                 <AdminPortal
                   workOrders={workOrders}
                   riskAnalytics={riskAnalytics}
                 />
               )}
-              {currentRole === "representative" && (
+              {SHOW_OFFICIAL_TOOLS && currentRole === "representative" && (
                 <RepresentativePortal campaignAnalytics={campaignAnalytics} />
               )}
-              {currentRole === "resident" && (
+              {!SHOW_OFFICIAL_TOOLS ? (
+                <MyReportsPanel issues={issues} userId={authenticatedUser?.id ?? null} />
+              ) : currentRole === "resident" && (
                 <ResidentPortal
                   initiatives={initiatives}
                   issues={issues}

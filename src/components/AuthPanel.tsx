@@ -1,8 +1,9 @@
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/src/lib/supabase";
 
 export interface AuthPanelProps {
@@ -12,63 +13,92 @@ export interface AuthPanelProps {
 export function AuthPanel({ onUserChange }: AuthPanelProps) {
   const [user, setUser] = useState<User | null>(null);
   const [authMessage, setAuthMessage] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+
+  // Keep the latest parent callback without recreating the auth subscription.
+  const onUserChangeRef = useRef(onUserChange);
+  onUserChangeRef.current = onUserChange;
+
+  const notifyUserChange = useCallback((nextUser: User | null) => {
+    setUser(nextUser);
+
+    // Run parent work after the synchronous Supabase auth callback completes.
+    void Promise.resolve()
+      .then(() => onUserChangeRef.current(nextUser))
+      .catch((error: unknown) => {
+        console.error("Auth user change callback failed:", error);
+      });
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
-    void supabase.auth.getUser().then(({ data, error }) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
-      if (error) {
-        setAuthMessage("We could not verify your saved session.");
-        setUser(null);
-        void onUserChange(null);
-        return;
-      }
-      setUser(data.user);
-      void onUserChange(data.user);
-    });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      const nextUser = session?.user ?? null;
-      setUser(nextUser);
-      void onUserChange(nextUser);
+      setAuthMessage("");
+      notifyUserChange(session?.user ?? null);
     });
 
     return () => {
       mounted = false;
-      data.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, [onUserChange]);
+  }, [notifyUserChange]);
 
   const handleSignOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      setAuthMessage(error.message);
-      return;
+    if (signingOut) return;
+
+    setSigningOut(true);
+    setAuthMessage("");
+
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        console.error("Supabase sign-out failed:", error);
+        setAuthMessage("Sign out failed. Please try again.");
+      }
+
+      // The SIGNED_OUT event updates the local and parent state.
+    } catch (error) {
+      console.error("Unexpected sign-out error:", error);
+      setAuthMessage("Something went wrong while signing out.");
+    } finally {
+      setSigningOut(false);
     }
-    setUser(null);
-    void onUserChange(null);
   };
 
   return (
     <div className="flex items-center gap-2">
       {authMessage && (
-        <Link href="/auth" role="status" title={authMessage} className="max-w-24 truncate text-xs font-semibold text-[#a33d2f] underline sm:max-w-none">
+        <span
+          role="alert"
+          className="max-w-36 truncate text-xs font-semibold text-[#a33d2f]"
+          title={authMessage}
+        >
           {authMessage}
-        </Link>
+        </span>
       )}
+
       {user ? (
         <>
-          <span className="hidden max-w-36 truncate text-xs text-[#647168] sm:inline" title={user.email}>
-            {user.email}
+          <span
+            className="hidden max-w-36 truncate text-xs text-[#647168] sm:inline"
+            title={user.email ?? "Signed in"}
+          >
+            {user.email ?? "Signed in"}
           </span>
+
           <button
             type="button"
             onClick={handleSignOut}
-              className="whitespace-nowrap border border-[#cbd5cc] bg-[#fffefa] px-3 py-2 text-xs font-bold text-[#263b48] transition hover:bg-[#e8edef]"
+            disabled={signingOut}
+            className="whitespace-nowrap border border-[#cbd5cc] bg-[#fffefa] px-3 py-2 text-xs font-bold text-[#263b48] transition hover:bg-[#e8edef] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Sign out
+            {signingOut ? "Signing out..." : "Sign out"}
           </button>
         </>
       ) : (

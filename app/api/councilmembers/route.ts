@@ -1,49 +1,143 @@
+
 import { NextResponse } from "next/server";
+
+interface CouncilMemberRecord {
+  name?: string;
+  district?: string | number;
+  council_member_id?: string;
+  office_id?: string;
+  term_start?: string;
+  term_end?: string;
+}
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, max-age=0",
+};
+
+function jsonResponse(
+  body: Record<string, unknown>,
+  status = 200,
+) {
+  return NextResponse.json(body, {
+    status,
+    headers: NO_STORE_HEADERS,
+  });
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const districtStr = searchParams.get("district");
 
-  if (!districtStr) {
-    return NextResponse.json({ error: "District parameter is required" }, { status: 400 });
+  if (!districtStr || !/^(?:[1-9]|[1-4]\d|5[01])$/.test(districtStr)) {
+    return jsonResponse(
+      { error: "District must be an integer from 1 to 51." },
+      400,
+    );
   }
 
   const districtNum = Number(districtStr);
-  if (!Number.isInteger(districtNum) || districtNum < 1 || districtNum > 51) {
-    return NextResponse.json({ error: "District must be an integer from 1 to 51." }, { status: 400 });
-  }
+  const today = new Date().toISOString().slice(0, 10);
 
   try {
-    const url = new URL("https://data.cityofnewyork.us/resource/uvw5-9znb.json");
+    const url = new URL(
+      "https://data.cityofnewyork.us/resource/uvw5-9znb.json",
+    );
+
     url.searchParams.set("$where", `district=${districtNum}`);
-    url.searchParams.set("$order", "term_end DESC");
-    url.searchParams.set("$limit", "1");
-    const res = await fetch(url, {
-      next: { revalidate: 86400 }, // Cache for 24 hours
+    url.searchParams.set("$order", "term_start DESC");
+    url.searchParams.set("$limit", "100");
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    let response: Response;
+
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      throw new Error(`NYC Open Data returned ${response.status}`);
+    }
+
+    const data: unknown = await response.json();
+
+    if (!Array.isArray(data)) {
+      throw new Error("Unexpected NYC Open Data response format.");
+    }
+
+    const records = data as CouncilMemberRecord[];
+
+    const activeMembers = records.filter((member) => {
+      if (
+        typeof member.name !== "string" ||
+        typeof member.term_start !== "string" ||
+        typeof member.term_end !== "string"
+      ) {
+        return false;
+      }
+
+      return (
+        member.term_start.slice(0, 10) <= today &&
+        member.term_end.slice(0, 10) >= today
+      );
     });
 
-    if (!res.ok) throw new Error("Failed to fetch from NYC Open Data");
-
-    const data = await res.json();
-    const liveMember = data[0] || {};
-    if (typeof liveMember.name !== "string" || !liveMember.name.trim()) {
-      return NextResponse.json(
-        { error: "No current council member record is available for this district." },
-        { status: 404 },
+    if (activeMembers.length === 0) {
+      return jsonResponse(
+        {
+          error: "No active council member record is available for this district.",
+          district: districtNum,
+        },
+        404,
       );
     }
 
-    const official = {
-      district: districtNum,
-      name: liveMember.name.trim(),
-      term_start: typeof liveMember.term_start === "string" ? liveMember.term_start : null,
-      term_end: typeof liveMember.term_end === "string" ? liveMember.term_end : null,
-      officialDirectoryUrl: `https://council.nyc.gov/district-${districtNum}/`,
-    };
+    if (activeMembers.length !== 1) {
+      console.error("Ambiguous active council member records:", {
+        district: districtNum,
+        count: activeMembers.length,
+      });
 
-    return NextResponse.json({ official });
-  } catch (err) {
-    console.error("Error fetching council member:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+      return jsonResponse(
+        {
+          error: "Multiple active council member records require verification.",
+        },
+        503,
+      );
+    }
+
+    const liveMember = activeMembers[0];
+
+    return jsonResponse({
+      official: {
+        district: districtNum,
+        name: liveMember.name!.trim(),
+        councilMemberId: liveMember.council_member_id ?? null,
+        officeId: liveMember.office_id ?? null,
+        termStart: liveMember.term_start,
+        termEnd: liveMember.term_end,
+        officialDirectoryUrl:
+          `https://council.nyc.gov/district-${districtNum}/`,
+      },
+      source: "NYC Open Data",
+      sourceDataset: "uvw5-9znb",
+      checkedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Error fetching council member:", error);
+
+    return jsonResponse(
+      { error: "Council member information is temporarily unavailable." },
+      503,
+    );
   }
 }
