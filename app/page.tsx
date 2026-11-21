@@ -101,6 +101,10 @@ export default function Home() {
   const [locationError, setLocationError] = useState("");
   const [success, setSuccess] = useState<ReportResponse | null>(null);
 
+  // Cloudflare Turnstile state
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
+
   const geosearchRequestRef = useRef(0);
   const successCloseRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -176,6 +180,10 @@ export default function Home() {
     setLocationError("");
     setFormError("");
     setLocating(false);
+
+    // Clear the previous CAPTCHA token and reset the widget.
+    setCaptchaToken("");
+    setCaptchaResetKey((previous) => previous + 1);
   }, []);
 
   const openReportModal = () => {
@@ -388,6 +396,12 @@ export default function Home() {
       return;
     }
 
+    // Never submit a new guest report without a verified CAPTCHA token.
+    if (!captchaToken) {
+      setFormError("Complete the security verification before submitting.");
+      return;
+    }
+
     setSubmitting(true);
     setFormError("");
 
@@ -405,6 +419,7 @@ export default function Home() {
           lat: selectedLocation[0],
           lng: selectedLocation[1],
           photoUrl: form.media_url || null,
+          captchaToken,
         }),
       });
 
@@ -431,6 +446,11 @@ export default function Home() {
       );
     } finally {
       setSubmitting(false);
+
+      // Turnstile tokens are single-use. Require a fresh challenge
+      // after every submission attempt, including failed attempts.
+      setCaptchaToken("");
+      setCaptchaResetKey((previous) => previous + 1);
     }
   };
 
@@ -637,6 +657,9 @@ export default function Home() {
           formError={formError}
           submitting={submitting}
           locationError={locationError}
+          captchaToken={captchaToken}
+          captchaResetKey={captchaResetKey}
+          onCaptchaTokenChange={setCaptchaToken}
           onAddressSearch={handleAddressSearch}
           onUseMyLocation={handleUseMyLocation}
           onSelectSuggestion={handleSelectSuggestion}
