@@ -25,7 +25,6 @@ function getAnonKey(): string {
 
 /**
  * Administrative client.
- *
  * Server-only. Uses elevated credentials that bypass RLS.
  * Every caller must independently enforce authentication,
  * authorization, and input validation.
@@ -48,7 +47,6 @@ export function createServerAdminClient() {
 
 /**
  * User-scoped client for API routes using explicit Bearer tokens.
- *
  * Always verify the token with supabase.auth.getUser(token)
  * before trusting the authenticated user.
  */
