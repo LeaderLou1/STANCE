@@ -1,3 +1,4 @@
+
 export type UserRole = "resident" | "representative" | "admin";
 
 export type IssueStatus =
@@ -6,7 +7,6 @@ export type IssueStatus =
   | "Pending Resolution"
   | "Resolved";
 
-// src/types/index.ts
 export type IssueUrgency =
   | "Low Priority"
   | "Medium Baseline"
@@ -17,6 +17,7 @@ export interface ReportForm {
   title: string;
   description: string;
   category: string;
+  reporterEmail?: string;
   zip_code: string;
   district_id?: string | null;
   urgency: IssueUrgency;

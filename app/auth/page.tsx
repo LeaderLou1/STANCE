@@ -1,532 +1,279 @@
+
 "use client";
 
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { FormEvent, useState, useSyncExternalStore } from "react";
-import { supabase } from "@/src/lib/supabase";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/src/lib/supabase";
+import { ArrowLeft, Loader2, ShieldCheck } from "lucide-react";
 
-const inputClass =
-  "w-full border border-[#cbd5cc] bg-white p-3 text-sm outline-none transition placeholder:text-[#98a49b] focus:border-[#2f7d5b] focus:ring-2 focus:ring-[#dbe8df]";
-
-type AuthMode = "signin" | "signup" | "reset" | "update-password";
-
-interface CouncilDistrictOption {
-  id: string;
-  number: number;
-  name: string;
-  representativeName: string | null;
-}
-
-function subscribeToHash(callback: () => void) {
-  window.addEventListener("hashchange", callback);
-
-  return () => {
-    window.removeEventListener("hashchange", callback);
-  };
-}
-
-function getHashSnapshot() {
-  return window.location.hash;
-}
-
-function getServerHashSnapshot() {
-  return "";
-}
+type AuthMode = "signin" | "signup";
 
 export default function AuthPage() {
   const router = useRouter();
 
-  const [selectedMode, setSelectedMode] = useState<AuthMode>("signin");
+  const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [zipCode, setZipCode] = useState("");
-  const [districts, setDistricts] = useState<CouncilDistrictOption[]>([]);
-  const [districtsLoading, setDistrictsLoading] = useState(false);
-  const [districtsError, setDistrictsError] = useState("");
-  const [councilDistrict, setCouncilDistrict] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [canResendConfirmation, setCanResendConfirmation] = useState(false);
+  const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const hash = useSyncExternalStore(
-    subscribeToHash,
-    getHashSnapshot,
-    getServerHashSnapshot
-  );
+  useEffect(() => {
+    let mounted = true;
 
-  const isRecoveryHash = hash.includes("type=recovery");
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-  const mode: AuthMode = isRecoveryHash
-    ? "update-password"
-    : selectedMode;
-
-  const loadDistricts = async () => {
-    setDistrictsLoading(true);
-    setDistrictsError("");
-
-    try {
-      const response = await fetch("/api/districts");
-      const result = (await response.json()) as {
-        districts?: CouncilDistrictOption[];
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(result.error || "Could not load council districts.");
+      if (mounted && session) {
+        router.replace("/");
+        router.refresh();
       }
-      if (!Array.isArray(result.districts) || result.districts.length === 0) {
-        throw new Error("No council districts are available for signup yet.");
+    };
+
+    void checkSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        router.replace("/");
+        router.refresh();
       }
-      setDistricts(result.districts);
-    } catch (loadError) {
-      setDistrictsError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Could not load council districts.",
-      );
-    } finally {
-      setDistrictsLoading(false);
-    }
-  };
+    });
 
-  const hashMessage =
-    isRecoveryHash
-      ? "Please enter your new password below."
-      : hash.includes("access_token") || hash.includes("type=signup")
-      ? "Your email is confirmed. You can now use STANCE."
-      : "";
-
-  const displayMessage = message || hashMessage;
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (
-      mode === "signup" &&
-      !districts.some(
-        (district) => String(district.number) === councilDistrict,
-      )
-    ) {
-      setError("Choose your NYC Council District to continue.");
-      return;
-    }
+    if (loading) return;
 
     setLoading(true);
-    setError("");
     setMessage("");
-    setCanResendConfirmation(false);
+    setErrorMessage("");
 
     try {
-    if (mode === "update-password") {
-      const { error: updateError } = await supabase.auth.updateUser({
+      const normalizedEmail = email.trim().toLowerCase();
+
+      if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+        });
+
+        if (error) throw error;
+
+        if (data.session) {
+          router.replace("/");
+          router.refresh();
+          return;
+        }
+
+        setMessage(
+          "Account created. Check your email for a confirmation link before signing in."
+        );
+
+        setMode("signin");
+        setPassword("");
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
         password,
       });
 
-      if (updateError) {
-        setError(updateError.message);
-      } else {
-        setMessage("Password updated successfully! Redirecting...");
+      if (error) throw error;
 
-        setTimeout(() => {
-          setSelectedMode("signin");
-          window.location.hash = "";
-          router.push("/auth");
-        }, 2000);
-      }
-
-      return;
-    }
-
-    if (mode === "reset") {
-      const { error: resetError } =
-        await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth`,
-        });
-
-      if (resetError) {
-        setError(resetError.message);
-      } else {
-        setMessage(
-          "If an account exists for that email, a reset link is on its way."
-        );
-      }
-
-      return;
-    }
-
-    const result =
-      mode === "signup"
-        ? await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              emailRedirectTo: `${window.location.origin}/auth`,
-              data: {
-                full_name: fullName.trim(),
-                zip_code: zipCode,
-                council_district: councilDistrict,
-              },
-            },
-          })
-        : await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-
-    if (result.error) {
-      setError(result.error.message);
-      setCanResendConfirmation(
-        mode === "signin" &&
-          /email not confirmed|confirm your email/i.test(result.error.message)
-      );
-    } else if (mode === "signup" && !result.data.session) {
-      setMessage(
-        "Account created. Check your email to confirm your account."
-      );
-      setCanResendConfirmation(true);
-    } else {
-      window.location.href = "/";
-    }
-
-    } catch (authError) {
-      setError(
-        authError instanceof Error
-          ? `Could not reach Supabase Auth: ${authError.message}`
-          : "Could not reach Supabase Auth. Check your connection and try again."
+      router.replace("/");
+      router.refresh();
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Authentication failed. Please try again."
       );
     } finally {
       setLoading(false);
     }
-  };
-
-  const isSignup = mode === "signup";
-  const isReset = mode === "reset";
-  const isUpdatePassword = mode === "update-password";
-
-  const changeMode = (nextMode: AuthMode) => {
-    setSelectedMode(nextMode);
-    setError("");
-    setMessage("");
-    setCanResendConfirmation(false);
-    if (nextMode === "signup" && districts.length === 0 && !districtsLoading) {
-      void loadDistricts();
-    }
-  };
-
-  const resendConfirmation = async () => {
-    if (!email.trim()) {
-      setError("Enter your email address first.");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    setMessage("");
-    try {
-      const { error: resendError } = await supabase.auth.resend({
-        type: "signup",
-        email: email.trim(),
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth`,
-        },
-      });
-      if (resendError) throw resendError;
-      setMessage("If confirmation is still required, a new link has been sent.");
-    } catch (resendError) {
-      setError(
-        resendError instanceof Error
-          ? resendError.message
-          : "Could not resend the confirmation email. Please try again."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const clearLocalSession = async () => {
-    setLoading(true);
-    setError("");
-    const { error: signOutError } = await supabase.auth.signOut({
-      scope: "local",
-    });
-    if (signOutError) {
-      setError(signOutError.message);
-    } else {
-      setMessage("Saved session cleared. Sign in again with your account.");
-    }
-    setLoading(false);
   };
 
   return (
-    <main className="min-h-screen bg-[#f3f1ec] px-4 py-10 text-[#17211d] sm:py-16">
-      <div className="mx-auto grid w-full max-w-5xl overflow-hidden border border-[#cbd5cc] bg-[#fffefa] shadow-[0_24px_80px_rgba(23,33,29,0.12)] md:grid-cols-[1fr_0.9fr]">
-        <section className="bg-[#123b2a] p-8 text-[#f3f1ec] sm:p-12">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-lg font-black tracking-[-0.04em]"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#d89542] text-sm text-[#17211d]">
-              S
-            </span>
-            STANCE
-          </Link>
+    <main className="flex min-h-screen items-center justify-center bg-[#f5f5ef] px-5 py-12">
+      <div className="w-full max-w-md">
+        <Link
+          href="/"
+          className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-[#52645a] transition hover:text-[#263b48]"
+        >
+          <ArrowLeft size={16} />
+          Back to STANCE
+        </Link>
 
-          <div className="mt-20 max-w-sm">
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-[#e8b86d]">
-              A public record for local life
+        <section className="border border-[#dce1d9] bg-[#fffefa] p-7 shadow-sm sm:p-9">
+          <div className="mb-7">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center bg-[#e8eee7] text-[#315a43]">
+              <ShieldCheck size={25} />
+            </div>
+
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#58715e]">
+              STANCE
             </p>
 
-            <h1 className="text-4xl font-black leading-[0.98] tracking-[-0.06em] sm:text-5xl">
-              Make the issue visible.
+            <h1 className="text-3xl font-bold tracking-tight text-[#263b48]">
+              {mode === "signin" ? "Welcome back." : "Create your account."}
             </h1>
 
-            <p className="mt-5 text-sm leading-6 text-[#dbe8df]">
-              Create an account to report concerns, follow progress, and add
-              context to the issues your neighbors care about.
-            </p>
-          </div>
-        </section>
-
-        <section className="p-8 sm:p-12">
-          <div className="mb-8">
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#b7732d]">
-              {isUpdatePassword
-                ? "Security update"
-                : isReset
-                ? "Account recovery"
-                : isSignup
-                ? "New resident account"
-                : "Welcome back"}
-            </p>
-
-            <h2 className="text-3xl font-black tracking-[-0.05em]">
-              {isUpdatePassword
-                ? "Set new password"
-                : isReset
-                ? "Reset your password"
-                : isSignup
-                ? "Create your account"
-                : "Sign in to STANCE"}
-            </h2>
-
-            <p className="mt-2 text-sm leading-6 text-[#647168]">
-              {isUpdatePassword
-                ? "Enter your new credentials below."
-                : isReset
-                ? "We will email a secure recovery link."
-                : "Every new account starts as a resident. Staff access is granted separately by an authorized administrator."}
+            <p className="mt-3 text-sm leading-6 text-[#68746c]">
+              {mode === "signin"
+                ? "Sign in to access your STANCE account."
+                : "Create an account to manage your civic reports and activity."}
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignup && (
-              <>
-                <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
-                  Full name (optional)
-                  <input
-                    className={`${inputClass} mt-2`}
-                    value={fullName}
-                    onChange={(event) => setFullName(event.target.value)}
-                    autoComplete="name"
-                  />
-                </label>
+          <div className="mb-6 grid grid-cols-2 border border-[#dce1d9] p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signin");
+                setMessage("");
+                setErrorMessage("");
+              }}
+              className={`py-2.5 text-sm font-bold transition ${
+                mode === "signin"
+                  ? "bg-[#263b48] text-white"
+                  : "text-[#68746c] hover:bg-[#f1f3ed]"
+              }`}
+            >
+              Sign in
+            </button>
 
-                <label
-                  htmlFor="council-district"
-                  className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
-                >
-                  NYC Council District
-                  <select
-                    id="council-district"
-                    className={`${inputClass} mt-2`}
-                    value={councilDistrict}
-                    onChange={(event) => setCouncilDistrict(event.target.value)}
-                    required
-                    disabled={districtsLoading || districts.length === 0}
-                  >
-                    <option value="">
-                      {districtsLoading
-                        ? "Loading districts..."
-                        : "Choose your council district"}
-                    </option>
-                    {districts.map((district) => (
-                      <option key={district.id} value={district.number}>
-                        {district.name}
-                        {district.representativeName
-                          ? ` — ${district.representativeName}`
-                          : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signup");
+                setMessage("");
+                setErrorMessage("");
+              }}
+              className={`py-2.5 text-sm font-bold transition ${
+                mode === "signup"
+                  ? "bg-[#263b48] text-white"
+                  : "text-[#68746c] hover:bg-[#f1f3ed]"
+              }`}
+            >
+              Sign up
+            </button>
+          </div>
 
-                <p className="-mt-2 text-xs leading-5 text-[#647168]">
-                  Your district connects your account with the right local
-                  representative. ZIP code is optional and is only used as
-                  additional location context.
-                </p>
-
-                {districtsError && (
-                  <div
-                    role="alert"
-                    className="flex items-center justify-between gap-3 border border-[#e6b7b0] bg-[#fdf0ed] p-3 text-xs font-semibold text-[#a33d2f]"
-                  >
-                    <span>{districtsError}</span>
-                    <button
-                      type="button"
-                      onClick={() => void loadDistricts()}
-                      className="shrink-0 underline"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-
-                <label
-                  htmlFor="signup-zip-code"
-                  className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]"
-                >
-                  ZIP code (optional)
-                  <input
-                    id="signup-zip-code"
-                    className={`${inputClass} mt-2`}
-                    inputMode="numeric"
-                    maxLength={5}
-                    value={zipCode}
-                    onChange={(event) =>
-                      setZipCode(event.target.value.replace(/\D/g, ""))
-                    }
-                  />
-                </label>
-              </>
-            )}
-
-            {!isUpdatePassword && (
-              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-2 block text-sm font-bold text-[#263b48]"
+              >
                 Email address
-                <input
-                  className={`${inputClass} mt-2`}
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  autoComplete="email"
-                />
               </label>
-            )}
 
-            {(isSignup || (!isReset && !isUpdatePassword)) && (
-              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                className="w-full border border-[#cbd5cc] bg-white px-4 py-3 text-sm text-[#263b48] outline-none transition placeholder:text-[#a0aaa1] focus:border-[#526e5b] focus:ring-2 focus:ring-[#526e5b]/10"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="password"
+                className="mb-2 block text-sm font-bold text-[#263b48]"
+              >
                 Password
-                <input
-                  className={`${inputClass} mt-2`}
-                  type="password"
-                  required
-                  minLength={8}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete={
-                    isSignup ? "new-password" : "current-password"
-                  }
-                />
               </label>
-            )}
 
-            {isUpdatePassword && (
-              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#647168]">
-                New Password
-                <input
-                  className={`${inputClass} mt-2`}
-                  type="password"
-                  required
-                  minLength={8}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="new-password"
-                />
-              </label>
-            )}
+              <input
+                id="password"
+                type="password"
+                autoComplete={
+                  mode === "signin" ? "current-password" : "new-password"
+                }
+                required
+                minLength={6}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Enter your password"
+                className="w-full border border-[#cbd5cc] bg-white px-4 py-3 text-sm text-[#263b48] outline-none transition placeholder:text-[#a0aaa1] focus:border-[#526e5b] focus:ring-2 focus:ring-[#526e5b]/10"
+              />
 
-            {error && (
-              <div role="alert" className="border border-[#e6b7b0] bg-[#fdf0ed] p-3 text-sm font-semibold text-[#a33d2f]">
-                <p>{error}</p>
-                {!isSignup && !isReset && !isUpdatePassword && (
-                  <button
-                    type="button"
-                    onClick={clearLocalSession}
-                    disabled={loading}
-                    className="mt-2 text-left text-xs font-bold underline"
-                  >
-                    Clear this browser&apos;s saved session and retry
-                  </button>
-                )}
+              {mode === "signup" && (
+                <p className="mt-2 text-xs text-[#7b857d]">
+                  Use at least 6 characters.
+                </p>
+              )}
+            </div>
+
+            {errorMessage && (
+              <div
+                role="alert"
+                className="border border-[#e7c7c1] bg-[#fff1ee] p-3 text-sm text-[#a33d2f]"
+              >
+                {errorMessage}
               </div>
             )}
 
-            {displayMessage && (
-              <p
+            {message && (
+              <div
                 role="status"
-                className="border border-[#a9c8b3] bg-[#e5f0e7] p-3 text-sm font-semibold text-[#1e5b3d]"
+                className="border border-[#cbdcca] bg-[#edf5eb] p-3 text-sm text-[#315a43]"
               >
-                {displayMessage}
-              </p>
-            )}
-
-            {canResendConfirmation && (
-              <button
-                type="button"
-                onClick={resendConfirmation}
-                disabled={loading}
-                className="w-full border border-[#2f7d5b] px-4 py-2.5 text-sm font-bold text-[#2f7d5b] transition hover:bg-[#e5f0e7] disabled:opacity-50"
-              >
-                Resend confirmation email
-              </button>
+                {message}
+              </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#123b2a] px-4 py-3 text-sm font-bold text-white shadow-[0_3px_0_#081e15] transition hover:bg-[#1c563d] disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 bg-[#263b48] px-4 py-3.5 text-sm font-bold text-white transition hover:bg-[#344f5d] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading
-                ? "Please wait..."
-                : isUpdatePassword
-                ? "Update password"
-                : isReset
-                ? "Send reset link"
-                : isSignup
-                ? "Create resident account"
-                : "Sign in"}
+              {loading ? (
+                <>
+                  <Loader2 size={17} className="animate-spin" />
+                  Please wait...
+                </>
+              ) : mode === "signin" ? (
+                "Sign in"
+              ) : (
+                "Create account"
+              )}
             </button>
           </form>
 
-          {!isUpdatePassword && (
-            <div className="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-sm font-bold text-[#2f7d5b]">
-              {!isReset && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    changeMode(isSignup ? "signin" : "signup")
-                  }
-                >
-                  {isSignup
-                    ? "Already have an account? Sign in"
-                    : "Need an account? Sign up"}
-                </button>
-              )}
+          <div className="mt-7 border-t border-[#e5e8e1] pt-5">
+            <p className="text-center text-xs leading-5 text-[#7b857d]">
+              You can still submit a civic report without creating an account.
+            </p>
 
-              <button
-                type="button"
-                onClick={() =>
-                  changeMode(isReset ? "signin" : "reset")
-                }
-              >
-                {isReset ? "Back to sign in" : "Forgot password?"}
-              </button>
-            </div>
-          )}
+            <Link
+              href="/"
+              className="mt-3 block text-center text-sm font-bold text-[#315a43] hover:underline"
+            >
+              Continue as a guest
+            </Link>
+          </div>
         </section>
+
+        <p className="mt-6 text-center text-xs text-[#89928a]">
+          STANCE · Civic accountability through transparency.
+        </p>
       </div>
     </main>
   );
