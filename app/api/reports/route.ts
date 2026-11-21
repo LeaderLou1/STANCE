@@ -1,17 +1,17 @@
 
 import { NextResponse } from "next/server";
-import {
-  createHash,
-  createHmac,
-  randomBytes,
-} from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { createServerAdminClient } from "@/src/lib/serverSupabase";
 
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_REQUESTS_PER_HOUR = 5;
+const MAX_EMAILS_PER_ADDRESS_PER_HOUR = 3;
 const EMAIL_VERIFICATION_MINUTES = 30;
+const EXTERNAL_TIMEOUT_MS = 8000;
+
+type AdminClient = ReturnType<typeof createServerAdminClient>;
 
 interface ReportPayload {
   title?: unknown;
@@ -28,6 +28,10 @@ interface TurnstileResponse {
   success?: boolean;
   hostname?: string;
 }
+
+type BodyReadResult =
+  | { ok: true; text: string }
+  | { ok: false; status: 400 | 413; error: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -50,7 +54,6 @@ function isValidEmail(email: string): boolean {
 
 function getDistrictNumber(name: string): number | null {
   const match = name.match(/^Council District (\d{1,2})$/i);
-
   if (!match) return null;
 
   const number = Number(match[1]);
@@ -64,6 +67,107 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+/**
+ * Reads a request body without accumulating more than MAX_BODY_BYTES.
+ * Content-Length is checked separately, but the stream limit remains
+ * authoritative when the header is absent or inaccurate.
+ */
+async function readRequestBody(request: Request): Promise<BodyReadResult> {
+  const declaredLength = request.headers.get("content-length");
+
+  if (declaredLength !== null) {
+    const normalizedLength = declaredLength.trim();
+
+    if (!/^\d+$/.test(normalizedLength)) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Invalid Content-Length header.",
+      };
+    }
+
+    const length = Number(normalizedLength);
+
+    if (!Number.isSafeInteger(length)) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Invalid Content-Length header.",
+      };
+    }
+
+    if (length > MAX_BODY_BYTES) {
+      return {
+        ok: false,
+        status: 413,
+        error: "Request body is too large.",
+      };
+    }
+  }
+
+  if (!request.body) {
+    return { ok: true, text: "" };
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) break;
+      if (!value) continue;
+
+      totalBytes += value.byteLength;
+
+      if (totalBytes > MAX_BODY_BYTES) {
+        try {
+          await reader.cancel("Request body exceeds the allowed size.");
+        } catch {
+          // Cancellation is best-effort; the request is already rejected.
+        }
+
+        return {
+          ok: false,
+          status: 413,
+          error: "Request body is too large.",
+        };
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bodyBytes = new Uint8Array(totalBytes);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    bodyBytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+
+    return {
+      ok: true,
+      text: decoder.decode(bodyBytes),
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 400,
+      error: "Request body must contain valid UTF-8.",
+    };
+  }
+}
+
+// x-real-ip and x-forwarded-for are only trustworthy behind a proxy that
+// sets them itself (for example Vercel). Elsewhere a caller can spoof them.
 function getClientIp(request: Request): string {
   const realIp = request.headers.get("x-real-ip")?.trim();
 
@@ -71,9 +175,7 @@ function getClientIp(request: Request): string {
 
   const forwardedFor = request.headers.get("x-forwarded-for");
 
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0].trim();
-  }
+  if (forwardedFor) return forwardedFor.split(",")[0].trim();
 
   return "unknown";
 }
@@ -87,21 +189,29 @@ function getAppUrl(): URL {
 
   const url = new URL(configuredUrl);
 
+  const extraHosts = (process.env.APP_URL_ALLOWED_HOSTS ?? "")
+    .split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+
   const allowedHosts = new Set([
     "localhost",
     "127.0.0.1",
     "thestanceapp.com",
     "www.thestanceapp.com",
+    ...extraHosts,
   ]);
 
-  if (!allowedHosts.has(url.hostname)) {
+  if (!allowedHosts.has(url.hostname.toLowerCase())) {
     throw new Error("APP_URL hostname is not allowed.");
   }
 
+  const isLocal =
+    url.hostname === "localhost" || url.hostname === "127.0.0.1";
+
   if (
     url.protocol !== "https:" &&
-    !(url.protocol === "http:" &&
-      (url.hostname === "localhost" || url.hostname === "127.0.0.1"))
+    !(url.protocol === "http:" && isLocal)
   ) {
     throw new Error("APP_URL must use HTTPS outside local development.");
   }
@@ -121,40 +231,48 @@ async function verifyTurnstile(
   formData.set("secret", secret);
   formData.set("response", token);
 
-  const response = await fetch(
-    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: formData.toString(),
-      cache: "no-store",
-    }
-  );
+  try {
+    const response = await fetch(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: formData.toString(),
+        cache: "no-store",
+        signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+      }
+    );
 
-  if (!response.ok) return false;
+    if (!response.ok) return false;
 
-  const result = (await response.json()) as TurnstileResponse;
+    const result = (await response.json()) as TurnstileResponse;
 
-  return (
-    result.success === true &&
-    result.hostname?.toLowerCase() === expectedHostname.toLowerCase()
-  );
+    return (
+      result.success === true &&
+      result.hostname?.toLowerCase() === expectedHostname.toLowerCase()
+    );
+  } catch (error) {
+    console.error(
+      "Turnstile verification failed:",
+      error instanceof Error ? error.message : error
+    );
+
+    return false;
+  }
 }
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => {
-    const entities: Record<string, string> = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    };
+  const entities: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  };
 
-    return entities[character];
-  });
+  return value.replace(/[&<>"']/g, (character) => entities[character]);
 }
 
 async function sendVerificationEmail(
@@ -165,91 +283,150 @@ async function sendVerificationEmail(
   const from = process.env.EMAIL_FROM;
 
   if (!apiKey || !from) {
-    throw new Error("Email service environment variables are missing.");
+    console.error("Email service environment variables are missing.");
+    return false;
   }
 
   const safeUrl = escapeHtml(verificationUrl);
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [email],
-      subject: "Verify your email to continue with your STANCE report",
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;line-height:1.6">
-          <h2>Verify your email address</h2>
-          <p>We received a request to create a report through STANCE.</p>
-          <p>Verify your email address to continue:</p>
-          <p>
-            <a href="${safeUrl}"
-               style="display:inline-block;padding:12px 20px;background:#111;color:#fff;text-decoration:none;border-radius:6px">
-              Verify my email
-            </a>
-          </p>
-          <p>This link expires in ${EMAIL_VERIFICATION_MINUTES} minutes.</p>
-          <p>Your report has not been sent to any government official. You will have an opportunity to review and explicitly approve delivery separately.</p>
-          <p>If you did not request this, you can ignore this email.</p>
-        </div>
-      `,
-      text: [
-        "Verify your email address to continue with your STANCE report:",
-        verificationUrl,
-        "",
-        `This link expires in ${EMAIL_VERIFICATION_MINUTES} minutes.`,
-        "Your report has not been sent to any government official.",
-        "If you did not request this, ignore this email.",
-      ].join("\n"),
-    }),
-  });
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject: "Verify your email to continue with your STANCE report",
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;line-height:1.6">
+            <h2>Verify your email address</h2>
+            <p>We received a request to create a report through STANCE.</p>
+            <p>Verify your email address to continue:</p>
+            <p>
+              <a href="${safeUrl}"
+                 style="display:inline-block;padding:12px 20px;background:#111;color:#fff;text-decoration:none;border-radius:6px">
+                Verify my email
+              </a>
+            </p>
+            <p>This link expires in ${EMAIL_VERIFICATION_MINUTES} minutes.</p>
+            <p>Your report has not been sent to any government official. You will have an opportunity to review and explicitly approve delivery separately.</p>
+            <p>If you did not request this, you can ignore this email.</p>
+          </div>
+        `,
+        text: [
+          "Verify your email address to continue with your STANCE report:",
+          verificationUrl,
+          "",
+          `This link expires in ${EMAIL_VERIFICATION_MINUTES} minutes.`,
+          "Your report has not been sent to any government official.",
+          "If you did not request this, ignore this email.",
+        ].join("\n"),
+      }),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Resend email request failed:", response.status, errorText);
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      console.error(
+        "Resend email request failed:",
+        response.status,
+        errorText
+      );
+
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error(
+      "Resend email request threw:",
+      error instanceof Error ? error.message : error
+    );
+
     return false;
   }
-
-  return true;
 }
 
+type LimitResult = "allowed" | "limited" | "error";
+
+async function consumeRateLimit(
+  supabase: AdminClient,
+  hmacSecret: string,
+  scope: string,
+  subject: string,
+  maxRequests: number,
+  windowStart: Date
+): Promise<LimitResult> {
+  const rateKey = createHmac("sha256", hmacSecret)
+    .update(`${scope}:${subject}`)
+    .digest("hex");
+
+  const { data, error } = await supabase.rpc(
+    "check_report_rate_limit",
+    {
+      p_rate_key: rateKey,
+      p_window_start: windowStart.toISOString(),
+      p_max_requests: maxRequests,
+    }
+  );
+
+  if (error) {
+    console.error("Rate-limit check failed:", error.message);
+    return "error";
+  }
+
+  return data === true ? "allowed" : "limited";
+}
+
+async function deleteReport(
+  supabase: AdminClient | null,
+  id: string | null
+): Promise<void> {
+  if (!supabase || !id) return;
+
+  const { error } = await supabase
+    .from("reports")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("Cleanup of unsent report failed:", error.message);
+  }
+}
+
+const UNAVAILABLE = {
+  error: "Report submission is temporarily unavailable.",
+};
+
 export async function POST(request: Request) {
+  let supabase: AdminClient | null = null;
   let createdReportId: string | null = null;
 
   try {
-    const contentLength = Number(request.headers.get("content-length") ?? 0);
-
-    if (contentLength > MAX_BODY_BYTES) {
-      return NextResponse.json(
-        { error: "Request body is too large." },
-        { status: 413 }
-      );
-    }
-
     const hmacSecret = process.env.RATE_LIMIT_HMAC_SECRET;
 
-    if (!hmacSecret || hmacSecret.length < 32) {
-      console.error("RATE_LIMIT_HMAC_SECRET is missing or too short.");
-
-      return NextResponse.json(
-        { error: "Report submission is temporarily unavailable." },
-        { status: 503 }
+    if (
+      !hmacSecret ||
+      hmacSecret.length < 32 ||
+      !process.env.TURNSTILE_SECRET_KEY ||
+      !process.env.RESEND_API_KEY ||
+      !process.env.EMAIL_FROM
+    ) {
+      console.error(
+        "Report submission is missing required environment variables."
       );
+
+      return NextResponse.json(UNAVAILABLE, { status: 503 });
     }
 
-    const supabase = createServerAdminClient();
+    supabase = createServerAdminClient();
 
-    // Hash the client IP before storing it in the rate-limit table.
-    const clientIp = getClientIp(request);
-    const rateKey = createHmac("sha256", hmacSecret)
-      .update(`guest-report:${clientIp}`)
-      .digest("hex");
-
-    // Use a fixed UTC hourly window for atomic database-backed limiting.
     const now = new Date();
+
     const windowStart = new Date(
       Date.UTC(
         now.getUTCFullYear(),
@@ -259,25 +436,20 @@ export async function POST(request: Request) {
       )
     );
 
-    const { data: allowed, error: rateLimitError } = await supabase.rpc(
-      "check_report_rate_limit",
-      {
-        p_rate_key: rateKey,
-        p_window_start: windowStart.toISOString(),
-        p_max_requests: MAX_REQUESTS_PER_HOUR,
-      }
+    const ipResult = await consumeRateLimit(
+      supabase,
+      hmacSecret,
+      "guest-report",
+      getClientIp(request),
+      MAX_REQUESTS_PER_HOUR,
+      windowStart
     );
 
-    if (rateLimitError) {
-      console.error("Rate-limit check failed:", rateLimitError.message);
-
-      return NextResponse.json(
-        { error: "Report submission is temporarily unavailable." },
-        { status: 503 }
-      );
+    if (ipResult === "error") {
+      return NextResponse.json(UNAVAILABLE, { status: 503 });
     }
 
-    if (allowed !== true) {
+    if (ipResult === "limited") {
       return NextResponse.json(
         { error: "Too many submissions. Please try again later." },
         {
@@ -287,10 +459,20 @@ export async function POST(request: Request) {
       );
     }
 
+    // Enforce the body limit while reading, not after allocating the body.
+    const bodyResult = await readRequestBody(request);
+
+    if (!bodyResult.ok) {
+      return NextResponse.json(
+        { error: bodyResult.error },
+        { status: bodyResult.status }
+      );
+    }
+
     let rawBody: unknown;
 
     try {
-      rawBody = await request.json();
+      rawBody = JSON.parse(bodyResult.text);
     } catch {
       return NextResponse.json(
         { error: "Request body must contain valid JSON." },
@@ -395,6 +577,33 @@ export async function POST(request: Request) {
       );
     }
 
+    // Per-address limit, so the form cannot be used to flood one inbox.
+    const emailResult = await consumeRateLimit(
+      supabase,
+      hmacSecret,
+      "guest-report-email",
+      reporterEmail,
+      MAX_EMAILS_PER_ADDRESS_PER_HOUR,
+      windowStart
+    );
+
+    if (emailResult === "error") {
+      return NextResponse.json(UNAVAILABLE, { status: 503 });
+    }
+
+    if (emailResult === "limited") {
+      return NextResponse.json(
+        {
+          error:
+            "Too many submissions for this email address. Please try again later.",
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": "3600" },
+        }
+      );
+    }
+
     // Resolve the district from geographic boundaries, never ZIP code.
     const { data: districtId, error: districtLookupError } =
       await supabase.rpc("resolve_district_for_point", {
@@ -454,13 +663,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate independent, high-entropy tokens.
-    // Only hashes are stored in the database.
+    // Independent high-entropy tokens. Only hashes are stored.
     const statusToken = randomBytes(32).toString("hex");
     const verificationToken = randomBytes(32).toString("hex");
-
-    const statusTokenHash = sha256(statusToken);
-    const verificationTokenHash = sha256(verificationToken);
 
     const verificationExpiresAt = new Date(
       Date.now() + EMAIL_VERIFICATION_MINUTES * 60 * 1000
@@ -482,12 +687,14 @@ export async function POST(request: Request) {
         moderation_status: "Pending Review",
         resident_approved_at: null,
         approved_content: null,
-        status_token_hash: statusTokenHash,
-        email_verification_token_hash: verificationTokenHash,
+        status_token_hash: sha256(statusToken),
+        email_verification_token_hash: sha256(verificationToken),
         email_verification_expires_at: verificationExpiresAt,
         reporter_email_verified_at: null,
       })
-      .select("id, status, moderation_status, district_number, created_at")
+      .select(
+        "id, status, moderation_status, district_number, created_at"
+      )
       .single();
 
     if (reportError || !report) {
@@ -501,11 +708,7 @@ export async function POST(request: Request) {
 
     createdReportId = report.id;
 
-    const verificationUrl = new URL(
-      "/reports/verify",
-      appUrl.origin
-    );
-
+    const verificationUrl = new URL("/reports/verify", appUrl.origin);
     verificationUrl.searchParams.set("token", verificationToken);
 
     const emailSent = await sendVerificationEmail(
@@ -515,18 +718,7 @@ export async function POST(request: Request) {
 
     if (!emailSent) {
       // Do not leave a report behind when its verification email failed.
-      const { error: deleteError } = await supabase
-        .from("reports")
-        .delete()
-        .eq("id", report.id);
-
-      if (deleteError) {
-        console.error(
-          "Cleanup after email failure failed:",
-          deleteError.message
-        );
-      }
-
+      await deleteReport(supabase, createdReportId);
       createdReportId = null;
 
       return NextResponse.json(
@@ -538,7 +730,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // The raw status token is intentionally not returned.
+    // The raw status token is intentionally not returned or stored.
     // Its status-page workflow will be implemented separately.
     void statusToken;
 
@@ -560,6 +752,10 @@ export async function POST(request: Request) {
       "Report creation failed:",
       error instanceof Error ? error.message : error
     );
+
+    // Anything thrown after the insert must not leave an unverified report
+    // (and its email address) behind.
+    await deleteReport(supabase, createdReportId);
 
     return NextResponse.json(
       { error: "Unable to submit your report. Please try again later." },
