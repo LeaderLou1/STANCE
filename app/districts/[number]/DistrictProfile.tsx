@@ -177,8 +177,8 @@ export function DistrictProfile({ number }: { number: number }) {
                 Council District {profile.district.number}
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-[#e2eee5] sm:text-base">
-                Meet your district’s elected official and see the issues your
-                neighbors have raised in this community.
+                Meet your district’s elected official, see what neighbors have
+                reported, and report a problem of your own.
               </p>
             </div>
             <a
@@ -288,9 +288,9 @@ export function DistrictProfile({ number }: { number: number }) {
               </div>
               <Link
                 href="/"
-                className="hidden items-center gap-1 text-sm font-bold text-emerald-800 hover:underline sm:inline-flex"
+                className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-[#123b2a] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#0c2a1e]"
               >
-                Open STANCE
+                Report a problem
                 <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
               </Link>
             </div>

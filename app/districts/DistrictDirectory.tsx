@@ -67,7 +67,7 @@ export function DistrictDirectory() {
             <span>
               <span className="block text-sm font-black tracking-wide">STANCE</span>
               <span className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-                Civic intelligence
+                Report it. Get it seen.
               </span>
             </span>
           </Link>
@@ -75,7 +75,7 @@ export function DistrictDirectory() {
             href="/"
             className="text-sm font-bold text-neutral-600 transition hover:text-emerald-800"
           >
-            Back to dashboard
+            Back to home
           </Link>
         </div>
       </header>
@@ -89,8 +89,8 @@ export function DistrictDirectory() {
             Find your district.
           </h1>
           <p className="mt-4 text-base leading-7 text-neutral-600">
-            Meet your City Council member, see who represents your district on
-            STANCE, and follow the local issues residents have reported.
+            Find the City Council member for your district, see what neighbors
+            have reported, and report a problem of your own.
           </p>
         </div>
 

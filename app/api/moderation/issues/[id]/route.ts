@@ -14,6 +14,17 @@ interface ModerationBody {
   reason?: string | null;
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_REASON_LENGTH = 1000;
+
+const allowedStatuses = new Set([
+  "Pending Review",
+  "Approved",
+  "Rejected",
+  "Needs Information",
+]);
+
 export async function POST(request: Request, context: RouteContext) {
   try {
     const token = getBearerToken(request);
@@ -26,16 +37,29 @@ export async function POST(request: Request, context: RouteContext) {
     if (profile?.role !== "admin" && profile?.role !== "representative") {
       return NextResponse.json({ error: "Staff authorization required." }, { status: 403 });
     }
+
     const { id } = await context.params;
-    const body = (await request.json()) as ModerationBody;
-    const allowedStatuses = new Set([
-      "Pending Review",
-      "Approved",
-      "Rejected",
-      "Needs Information",
-    ]);
+    if (!UUID_PATTERN.test(id)) {
+      return NextResponse.json({ error: "Invalid report id." }, { status: 400 });
+    }
+
+    let body: ModerationBody;
+    try {
+      body = (await request.json()) as ModerationBody;
+    } catch {
+      return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
+    }
+
     if (!body.status || !allowedStatuses.has(body.status)) {
       return NextResponse.json({ error: "A valid moderation status is required." }, { status: 400 });
+    }
+
+    const reason = typeof body.reason === "string" ? body.reason.trim() : null;
+    if (reason !== null && reason.length > MAX_REASON_LENGTH) {
+      return NextResponse.json(
+        { error: `Reason must be ${MAX_REASON_LENGTH} characters or fewer.` },
+        { status: 400 },
+      );
     }
 
     if (profile.role === "representative") {
@@ -58,9 +82,12 @@ export async function POST(request: Request, context: RouteContext) {
     const { error } = await callerClient.rpc("moderate_issue", {
       p_issue_id: id,
       p_status: body.status,
-      p_reason: body.reason ?? null,
+      p_reason: reason || null,
     });
     if (error) throw error;
+
+    // MVP (planned): when status becomes "Approved", this is where delivery
+    // to the routed officials will be triggered after the resident's approval.
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Moderation API error:", error);

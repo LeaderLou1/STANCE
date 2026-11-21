@@ -1,169 +1,120 @@
+"use client";
 
-interface Milestone {
-  stage: string;
-  completed: boolean;
-  date?: string;
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/src/lib/supabase";
+
+interface ResponseLog {
+  id: string;
+  action_type: "acknowledged" | "assigned" | "resolved";
+  note: string | null;
+  created_at: string;
+}
+
+interface ReportDetails {
+  id: string;
+  title: string;
+  status: string;
+  created_at: string;
+  district_number: number;
 }
 
 interface CivicProgressTrackerProps {
-  milestones: Milestone[];
+  statusToken: string;
 }
 
-const STAGES = [
-  "Pending Review",
-  "Submitted",
-  "Acknowledged",
-  "Assigned",
-  "Resolved",
-] as const;
+export function CivicProgressTracker({ statusToken }: CivicProgressTrackerProps) {
+  const [report, setReport] = useState<ReportDetails | null>(null);
+  const [responses, setResponses] = useState<ResponseLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-function formatDate(date?: string): string | null {
-  if (!date) return null;
+  useEffect(() => {
+    async function fetchReportStatus() {
+      if (!statusToken) return;
+      setLoading(true);
+      setError(null);
 
-  const parsedDate = new Date(date);
+      try {
+        // 1. Fetch report by secure status_token
+        const { data: reportData, error: reportError } = await supabase
+          .from("reports")
+          .select("id, title, status, created_at, district_number")
+          .eq("status_token", statusToken)
+          .single();
 
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null;
+        if (reportError || !reportData) {
+          throw new Error("Report not found or invalid status token.");
+        }
+
+        setReport(reportData);
+
+        // 2. Fetch live responses associated with this report ID
+        const { data: responseData, error: responseError } = await supabase
+          .from("responses")
+          .select("id, action_type, note, created_at")
+          .eq("report_id", reportData.id)
+          .order("created_at", { ascending: true });
+
+        if (responseError) {
+          throw responseError;
+        }
+
+        setResponses(responseData || []);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to load report status.";
+        setError(message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void fetchReportStatus();
+  }, [statusToken]);
+
+  if (loading) {
+    return <div className="p-6 text-xs text-neutral-500 animate-pulse">Loading live tracking status...</div>;
   }
 
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(parsedDate);
-}
-
-export function CivicProgressTracker({
-  milestones,
-}: CivicProgressTrackerProps) {
-  const completedStages = STAGES.map((stage) => {
-    const milestone = milestones.find(
-      (item) => item.stage === stage
+  if (error || !report) {
+    return (
+      <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-xs text-red-800">
+        {error || "Report could not be found."}
+      </div>
     );
-
-    return {
-      stage,
-      completed: milestone?.completed ?? false,
-      date: formatDate(milestone?.date),
-    };
-  });
-
-  const lastCompletedIndex = completedStages.reduce(
-    (lastIndex, milestone, index) =>
-      milestone.completed ? index : lastIndex,
-    -1
-  );
-
-  const currentIndex = completedStages.findIndex(
-    (milestone, index) =>
-      !milestone.completed && index === lastCompletedIndex + 1
-  );
-
-  const completedCount = completedStages.filter(
-    (milestone) => milestone.completed
-  ).length;
+  }
 
   return (
-    <section
-      className="w-full min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-5"
-      aria-labelledby="civic-progress-heading"
-    >
-      <div className="mb-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4
-            id="civic-progress-heading"
-            className="text-sm font-semibold text-neutral-900"
-          >
-            Report Progress
-          </h4>
-
-          <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-semibold tabular-nums text-neutral-600">
-            {completedCount} of {STAGES.length} stages
-          </span>
+    <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm space-y-4">
+      <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+        <div>
+          <h3 className="text-sm font-extrabold text-neutral-900">{report.title}</h3>
+          <p className="text-[11px] text-neutral-500">District {report.district_number} • Submitted {new Date(report.created_at).toLocaleDateString()}</p>
         </div>
-
-        <p className="mt-1 text-xs leading-5 text-neutral-500">
-          Track what happens after your report is received.
-        </p>
+        <span className="rounded-full bg-neutral-900 px-3 py-1 text-[11px] font-bold text-white">
+          {report.status}
+        </span>
       </div>
 
-      <ol
-        className="space-y-3 sm:space-y-4"
-        aria-label="Report progress milestones"
-      >
-        {completedStages.map((milestone, index) => {
-          const isComplete = milestone.completed;
-          const isCurrent = index === currentIndex;
-
-          return (
-            <li
-              key={milestone.stage}
-              className="flex min-w-0 gap-3"
-              aria-current={isCurrent ? "step" : undefined}
-            >
-              <div className="flex shrink-0 flex-col items-center">
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm font-bold ${
-                    isComplete
-                      ? "border-emerald-600 bg-emerald-600 text-white"
-                      : isCurrent
-                        ? "border-blue-600 bg-blue-50 text-blue-700"
-                        : "border-neutral-300 bg-neutral-50 text-neutral-400"
-                  }`}
-                  aria-hidden="true"
-                >
-                  {isComplete ? "✓" : index + 1}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold text-neutral-700">Official Response History</h4>
+        {responses.length === 0 ? (
+          <p className="text-xs text-neutral-400 italic">Awaiting initial official response from district representatives.</p>
+        ) : (
+          <div className="space-y-2">
+            {responses.map((resp) => (
+              <div key={resp.id} className="flex items-start gap-3 rounded-xl bg-neutral-50 p-3 border border-neutral-100 text-xs">
+                <span className="font-bold text-neutral-900 uppercase tracking-wider text-[10px] bg-neutral-200 px-2 py-0.5 rounded">
+                  {resp.action_type}
+                </span>
+                <div className="flex-1">
+                  <p className="text-neutral-700">{resp.note || "No additional notes provided by official."}</p>
+                  <span className="text-[10px] text-neutral-400">{new Date(resp.created_at).toLocaleString()}</span>
                 </div>
-
-                {index !== completedStages.length - 1 && (
-                  <div
-                    className={`my-1 min-h-6 w-0.5 flex-1 ${
-                      isComplete
-                        ? "bg-emerald-500"
-                        : "bg-neutral-200"
-                    }`}
-                    aria-hidden="true"
-                  />
-                )}
               </div>
-
-              <div className="min-w-0 flex-1 pb-2">
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                  <p
-                    className={`break-words text-sm font-semibold ${
-                      isComplete || isCurrent
-                        ? "text-neutral-900"
-                        : "text-neutral-400"
-                    }`}
-                  >
-                    {milestone.stage}
-                  </p>
-
-                  {isComplete ? (
-                    <span className="shrink-0 text-xs font-semibold text-emerald-700">
-                      Completed
-                    </span>
-                  ) : isCurrent ? (
-                    <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
-                      Current stage
-                    </span>
-                  ) : (
-                    <span className="shrink-0 text-xs text-neutral-400">
-                      Upcoming
-                    </span>
-                  )}
-                </div>
-
-                {milestone.date && (
-                  <p className="mt-1 text-xs leading-5 text-neutral-500">
-                    {milestone.date}
-                  </p>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

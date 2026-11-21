@@ -20,7 +20,7 @@ export async function generateMetadata({
 
   return {
     title: `NYC Council District ${number} | STANCE`,
-    description: `Meet the elected official and explore community reports for NYC Council District ${number}.`,
+    description: `Meet the elected official for NYC Council District ${number}, see what neighbors have reported, and report a problem in your community.`,
   };
 }
 

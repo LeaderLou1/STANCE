@@ -7,10 +7,16 @@
   --success: #2f7d5b;
   --muted-accent: #dbe8df;
   --card: #fffefa;
+  /* Role accents: used by the parked official-facing portals; kept so they can be restored. */
   --resident-accent: #d89542;
   --representative-accent: #2f7d5b;
   --admin-accent: #263b48;
   --admin-surface: #e8edef;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -19,10 +25,29 @@ body {
     linear-gradient(90deg, rgba(18, 59, 42, 0.035) 1px, transparent 1px);
   background-size: 32px 32px;
   color: var(--foreground);
-  font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+  font-family: "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+  /* Keep content clear of phone notches and home bars */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 ::selection {
   background: #e8b86d;
   color: #17211d;
+}
+
+/* Visible keyboard focus on every interactive element */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Respect users who ask for less motion (loading pulses, map animations) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
