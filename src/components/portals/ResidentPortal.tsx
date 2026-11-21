@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import {
   Activity,
   ArrowRight,
@@ -77,8 +78,7 @@ function getStatusStyle(status: string): StatusStyle {
     case "ive got it":
       return {
         label: "Acknowledged",
-        description:
-          "An official has acknowledged your report.",
+        description: "An official has acknowledged your report.",
         className: "border-violet-200 bg-violet-50 text-violet-800",
         icon: UserCheck,
       };
@@ -86,8 +86,7 @@ function getStatusStyle(status: string): StatusStyle {
     case "assigned":
       return {
         label: "Assigned",
-        description:
-          "Responsibility for this issue has been assigned.",
+        description: "Responsibility for this issue has been assigned.",
         className: "border-indigo-200 bg-indigo-50 text-indigo-800",
         icon: Activity,
       };
@@ -96,8 +95,7 @@ function getStatusStyle(status: string): StatusStyle {
     case "pending resolution":
       return {
         label: "In progress",
-        description:
-          "Work is underway to address this issue.",
+        description: "Work is underway to address this issue.",
         className: "border-cyan-200 bg-cyan-50 text-cyan-800",
         icon: Activity,
       };
@@ -159,19 +157,14 @@ function getSummary(reports: ResidentReport[]) {
 
   return {
     total: reports.length,
-
     pending: reports.filter(
-      (report) =>
-        normalizeStatus(report.status) === "pending review"
+      (report) => normalizeStatus(report.status) === "pending review"
     ).length,
-
     active: reports.filter((report) =>
       activeStatuses.includes(normalizeStatus(report.status))
     ).length,
-
     resolved: reports.filter(
-      (report) =>
-        normalizeStatus(report.status) === "resolved"
+      (report) => normalizeStatus(report.status) === "resolved"
     ).length,
   };
 }
@@ -199,7 +192,6 @@ export function ResidentPortal({
       aria-label="Resident dashboard"
       className="w-full min-w-0 space-y-5 sm:space-y-6"
     >
-      {/* Dashboard header */}
       <div className="relative overflow-hidden rounded-2xl border border-[#d8e3dc] bg-[#f2f7f2] p-5 sm:p-8">
         <div
           aria-hidden="true"
@@ -210,10 +202,7 @@ export function ResidentPortal({
           <div className="min-w-0 max-w-xl">
             <div className="mb-3 flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-800">
-                <ShieldCheck
-                  aria-hidden="true"
-                  className="h-3.5 w-3.5"
-                />
+                <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5" />
                 Your community
               </span>
             </div>
@@ -223,9 +212,9 @@ export function ResidentPortal({
             </h2>
 
             <p className="mt-3 max-w-lg text-sm leading-6 text-neutral-600">
-              Keep track of neighborhood issues you've reported,
-              see official updates, and let us know when a problem
-              has actually been fixed.
+              Keep track of neighborhood issues you&apos;ve reported, see
+              official updates, and let us know when a problem has actually
+              been fixed.
             </p>
           </div>
 
@@ -235,17 +224,13 @@ export function ResidentPortal({
               onClick={onCreateReport}
               className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#245b43] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#194a35] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245b43] sm:w-auto"
             >
-              <Plus
-                aria-hidden="true"
-                className="h-4 w-4"
-              />
+              <Plus aria-hidden="true" className="h-4 w-4" />
               Report an issue
             </button>
           )}
         </div>
       </div>
 
-      {/* Summary metrics */}
       <div
         aria-label="Your report statistics"
         className="grid grid-cols-2 gap-3 lg:grid-cols-4"
@@ -257,7 +242,6 @@ export function ResidentPortal({
           description="Issues you've reported"
           iconClass="bg-neutral-100 text-neutral-700"
         />
-
         <SummaryCard
           label="Under review"
           value={summary.pending}
@@ -265,7 +249,6 @@ export function ResidentPortal({
           description="Awaiting review"
           iconClass="bg-amber-50 text-amber-700"
         />
-
         <SummaryCard
           label="Being addressed"
           value={summary.active}
@@ -273,7 +256,6 @@ export function ResidentPortal({
           description="Submitted or in progress"
           iconClass="bg-blue-50 text-blue-700"
         />
-
         <SummaryCard
           label="Marked resolved"
           value={summary.resolved}
@@ -283,7 +265,6 @@ export function ResidentPortal({
         />
       </div>
 
-      {/* Reports section */}
       <section
         aria-labelledby="resident-reports-heading"
         className="min-w-0 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm"
@@ -296,7 +277,6 @@ export function ResidentPortal({
             >
               Your reports
             </h3>
-
             <p className="mt-1 text-xs leading-5 text-neutral-500">
               Follow each report from review through official response.
             </p>
@@ -306,18 +286,14 @@ export function ResidentPortal({
             className="text-xs font-semibold text-neutral-500"
             aria-live="polite"
           >
-            {reports.length}{" "}
-            {reports.length === 1 ? "report" : "reports"}
+            {reports.length} {reports.length === 1 ? "report" : "reports"}
           </span>
         </div>
 
         {sortedReports.length === 0 ? (
           <div className="flex flex-col items-center px-5 py-12 text-center sm:px-6 sm:py-14">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
-              <FileText
-                aria-hidden="true"
-                className="h-8 w-8"
-              />
+              <FileText aria-hidden="true" className="h-8 w-8" />
             </div>
 
             <h4 className="text-lg font-bold text-neutral-900">
@@ -325,8 +301,8 @@ export function ResidentPortal({
             </h4>
 
             <p className="mt-2 max-w-sm text-sm leading-6 text-neutral-500">
-              When you report a neighborhood issue, you'll be able
-              to track its review, delivery, and official response here.
+              When you report a neighborhood issue, you&apos;ll be able to
+              track its review, delivery, and official response here.
             </p>
 
             {onCreateReport && (
@@ -335,10 +311,7 @@ export function ResidentPortal({
                 onClick={onCreateReport}
                 className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#245b43] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#194a35] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245b43] sm:w-auto"
               >
-                <Plus
-                  aria-hidden="true"
-                  className="h-4 w-4"
-                />
+                <Plus aria-hidden="true" className="h-4 w-4" />
                 Create your first report
               </button>
             )}
@@ -358,35 +331,31 @@ export function ResidentPortal({
                   className="min-w-0 p-4 transition hover:bg-neutral-50/70 sm:p-6"
                 >
                   <div className="flex min-w-0 flex-col gap-4 sm:flex-row">
-                    {/* Report photo */}
-                    <div className="h-36 w-full shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 sm:h-24 sm:w-28">
+                    <div className="relative h-36 w-full shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 sm:h-24 sm:w-28">
                       {report.photo_url ? (
-                        <img
+                        <Image
                           src={report.photo_url}
                           alt={`Photo for ${report.title}`}
-                          loading="lazy"
-                          className="h-full w-full object-cover"
+                          fill
+                          sizes="(max-width: 640px) 100vw, 112px"
+                          className="object-cover"
+                          unoptimized
                         />
                       ) : (
                         <div
                           className="flex h-full w-full items-center justify-center text-neutral-400"
                           aria-label="No report photo"
                         >
-                          <Camera
-                            aria-hidden="true"
-                            className="h-7 w-7"
-                          />
+                          <Camera aria-hidden="true" className="h-7 w-7" />
                         </div>
                       )}
                     </div>
 
-                    {/* Report details */}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="max-w-full break-words rounded-md bg-neutral-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-neutral-600">
                           {report.category}
                         </span>
-
                         <time
                           dateTime={report.created_at}
                           className="text-xs text-neutral-500"
@@ -419,14 +388,12 @@ export function ResidentPortal({
                               `NYC Council District ${report.district_number}`}
                           </span>
                         </span>
-
                         <span className="break-all font-mono">
                           Report #{report.id.slice(0, 8)}
                         </span>
                       </div>
                     </div>
 
-                    {/* Status and navigation */}
                     <div className="flex min-w-0 flex-col items-start gap-3 sm:w-40 sm:shrink-0 sm:items-end">
                       <span
                         className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold ${status.className}`}
@@ -435,9 +402,7 @@ export function ResidentPortal({
                           aria-hidden="true"
                           className="h-3.5 w-3.5 shrink-0"
                         />
-                        <span className="break-words">
-                          {status.label}
-                        </span>
+                        <span className="break-words">{status.label}</span>
                       </span>
 
                       {onViewReport && (
@@ -448,16 +413,12 @@ export function ResidentPortal({
                           className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-[#245b43] transition hover:text-[#194a35] focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245b43]"
                         >
                           View report
-                          <ArrowRight
-                            aria-hidden="true"
-                            className="h-4 w-4"
-                          />
+                          <ArrowRight aria-hidden="true" className="h-4 w-4" />
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Official response */}
                   {report.official_response && (
                     <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-3 sm:p-4">
                       <div className="flex items-center gap-2 text-xs font-bold text-blue-900">
@@ -480,7 +441,6 @@ export function ResidentPortal({
                     </div>
                   )}
 
-                  {/* Status explanation and resident confirmation */}
                   <div className="mt-4 flex flex-col gap-3 border-t border-neutral-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="min-w-0 text-xs leading-5 text-neutral-500">
                       {status.description}
@@ -489,16 +449,14 @@ export function ResidentPortal({
                     {isResolved && onConfirmResolution && (
                       <button
                         type="button"
-                        onClick={() =>
-                          onConfirmResolution(report.id)
-                        }
+                        onClick={() => onConfirmResolution(report.id)}
                         className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800 transition hover:bg-emerald-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 sm:w-auto"
                       >
                         <CheckCircle2
                           aria-hidden="true"
                           className="h-4 w-4"
                         />
-                        Confirm it's fixed
+                        Confirm it&apos;s fixed
                       </button>
                     )}
                   </div>
@@ -509,22 +467,19 @@ export function ResidentPortal({
         )}
       </section>
 
-      {/* Trust and transparency */}
       <div className="flex items-start gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
         <ShieldCheck
           aria-hidden="true"
           className="mt-0.5 h-5 w-5 shrink-0 text-[#245b43]"
         />
-
         <div className="min-w-0">
           <p className="text-sm font-bold text-neutral-800">
             Your report stays yours.
           </p>
-
           <p className="mt-1 text-xs leading-5 text-neutral-600">
-            A report is not sent to an official until you approve
-            its delivery. STANCE keeps your report status visible
-            so you can follow what happens next.
+            A report is not sent to an official until you approve its delivery.
+            STANCE keeps your report status visible so you can follow what
+            happens next.
           </p>
         </div>
       </div>
@@ -556,21 +511,16 @@ function SummaryCard({
         <p className="min-w-0 break-words text-[9px] font-bold uppercase leading-4 tracking-wider text-neutral-500 sm:text-[10px]">
           {label}
         </p>
-
         <span
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg sm:h-10 sm:w-10 ${iconClass}`}
         >
-          <Icon
-            aria-hidden="true"
-            className="h-4 w-4"
-          />
+          <Icon aria-hidden="true" className="h-4 w-4" />
         </span>
       </div>
 
       <p className="mt-3 text-2xl font-black tabular-nums tracking-tight text-neutral-900 sm:text-3xl">
         {Number.isFinite(value) ? value.toLocaleString() : "—"}
       </p>
-
       <p className="mt-1 break-words text-xs leading-5 text-neutral-500">
         {description}
       </p>

@@ -48,9 +48,13 @@ export function ReportModal({
   const onCloseRef = useRef(onClose);
   const submittingRef = useRef(submitting);
 
-  onCloseRef.current = onClose;
-  submittingRef.current = submitting;
+  // Keep event handlers synchronized with the latest props.
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    submittingRef.current = submitting;
+  }, [onClose, submitting]);
 
+  // Manage dialog focus, keyboard interaction, and background scrolling.
   useEffect(() => {
     previousFocusRef.current =
       document.activeElement instanceof HTMLElement
@@ -82,8 +86,7 @@ export function ReportModal({
       );
     };
 
-    // Focus the close control rather than an input so the mobile
-    // keyboard does not open automatically.
+    // Focus the close control so the mobile keyboard does not open.
     dialog
       ?.querySelector<HTMLElement>("[data-dialog-close]")
       ?.focus();
@@ -265,7 +268,7 @@ export function ReportModal({
               id="reporter-email-help"
               className="text-xs leading-5 text-[#89938a]"
             >
-              We'll use this to help you access your report and receive
+              We&apos;ll use this to help you access your report and receive
               updates. Your report is not automatically sent to officials.
             </p>
 
@@ -282,7 +285,7 @@ export function ReportModal({
               htmlFor="issue-title"
               className="block text-sm font-bold text-[#27372d]"
             >
-              What's the issue?
+              What&apos;s the issue?
               <span className="ml-1 text-red-600">*</span>
             </label>
 
@@ -499,10 +502,10 @@ export function ReportModal({
           {!isEditing && (
             <div className="rounded-xl border border-[#dce3dc] bg-[#f6f7f2] px-4 py-4">
               <p className="text-sm font-bold text-[#27372d]">
-                Your report won't be sent automatically.
+                Your report won&apos;t be sent automatically.
               </p>
               <p className="mt-1 text-xs leading-5 text-[#647168]">
-                After saving, you'll be able to review the report and its
+                After saving, you&apos;ll be able to review the report and its
                 intended recipients. It will only be shared with officials
                 after the required review and your explicit approval.
               </p>

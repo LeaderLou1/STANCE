@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { CheckCircle2, MapPin, Plus } from "lucide-react";
 
@@ -437,7 +438,7 @@ export default function Home() {
     <main className="min-h-screen overflow-x-clip bg-[#f8f8f4] text-[#17211d]">
       <header className="sticky top-0 z-40 border-b border-[#e3e7df] bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-8 sm:py-4 lg:flex-row lg:items-center lg:justify-between">
-          <a
+          <Link
             href="/"
             aria-label="STANCE home"
             className="flex min-h-11 items-center gap-3 self-start rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#47745b]"
@@ -454,18 +455,18 @@ export default function Home() {
                 Civic reporting
               </p>
             </div>
-          </a>
+          </Link>
 
           <nav
             aria-label="Main navigation"
             className="flex w-full items-center justify-between gap-2 lg:w-auto lg:justify-end lg:gap-3"
           >
-            <a
+            <Link
               href="/districts"
               className="inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-bold text-[#536057] transition hover:bg-[#f0f3ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#47745b]"
             >
               Districts
-            </a>
+            </Link>
 
             <div className="flex min-h-11 items-center">
               <AuthPanel onUserChange={() => undefined} />
@@ -510,12 +511,12 @@ export default function Home() {
               Create a report
             </button>
 
-            <a
+            <Link
               href="/districts"
               className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-[#d8dfd6] bg-white px-6 py-3.5 text-sm font-bold text-[#365444] transition hover:bg-[#f0f3ee] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#47745b] sm:w-auto"
             >
               Explore districts
-            </a>
+            </Link>
           </div>
 
           <div className="mt-9 grid max-w-lg grid-cols-1 gap-4 border-t border-[#e1e6de] pt-6 sm:mt-10 sm:grid-cols-3 sm:gap-4">

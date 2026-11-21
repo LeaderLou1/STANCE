@@ -1,11 +1,8 @@
 
 "use client";
 
-import React, {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import {
   ImagePlus,
   Loader2,
@@ -41,7 +38,6 @@ export function MediaUploader({
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
 
-  // Revoke temporary browser preview URLs when replaced or unmounted.
   useEffect(() => {
     if (!preview) return;
 
@@ -164,9 +160,12 @@ export function MediaUploader({
       {preview ? (
         <div className="overflow-hidden rounded-xl border border-[#d5ded5] bg-[#f6f7f2]">
           <div className="relative">
-            <img
+            <Image
               src={preview}
               alt={`Preview of ${fileName}`}
+              width={1200}
+              height={800}
+              unoptimized
               className="max-h-64 min-h-40 w-full object-contain"
             />
 
@@ -180,9 +179,7 @@ export function MediaUploader({
                   aria-hidden="true"
                   className="h-8 w-8 animate-spin text-white"
                 />
-                <span className="sr-only">
-                  Uploading image
-                </span>
+                <span className="sr-only">Uploading image</span>
               </div>
             )}
           </div>
@@ -193,7 +190,6 @@ export function MediaUploader({
                 aria-hidden="true"
                 className="h-4 w-4 shrink-0 text-[#47745b]"
               />
-
               <p className="truncate text-xs font-semibold text-[#365444]">
                 {fileName}
               </p>
@@ -206,10 +202,7 @@ export function MediaUploader({
               aria-label="Remove attached image"
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#647168] transition hover:bg-[#e8eee9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245b43] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <X
-                aria-hidden="true"
-                className="h-5 w-5"
-              />
+              <X aria-hidden="true" className="h-5 w-5" />
             </button>
           </div>
         </div>
@@ -226,11 +219,9 @@ export function MediaUploader({
                 aria-hidden="true"
                 className="h-7 w-7 animate-spin text-[#47745b]"
               />
-
               <span className="text-sm font-semibold text-[#365444]">
                 Uploading image...
               </span>
-
               <span className="text-xs text-[#647168]">
                 Please wait
               </span>
@@ -241,11 +232,9 @@ export function MediaUploader({
                 aria-hidden="true"
                 className="h-7 w-7 text-[#47745b]"
               />
-
               <span className="text-sm font-bold text-[#365444]">
                 Add a photo
               </span>
-
               <span className="text-xs leading-5 text-[#647168]">
                 JPG, PNG, or WebP · Maximum 10 MB
               </span>
@@ -263,7 +252,6 @@ export function MediaUploader({
             aria-hidden="true"
             className="mt-0.5 h-4 w-4 shrink-0 text-red-700"
           />
-
           <p className="break-words text-sm leading-5 text-red-800">
             {error}
           </p>

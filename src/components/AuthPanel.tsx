@@ -16,7 +16,10 @@ export function AuthPanel({ onUserChange }: AuthPanelProps) {
   const [signingOut, setSigningOut] = useState(false);
 
   const onUserChangeRef = useRef(onUserChange);
-  onUserChangeRef.current = onUserChange;
+
+  useEffect(() => {
+    onUserChangeRef.current = onUserChange;
+  }, [onUserChange]);
 
   const notifyUserChange = useCallback((nextUser: User | null) => {
     setUser(nextUser);
