@@ -1,19 +1,18 @@
 import { test, expect } from '@playwright/test';
 
-test('stance app loads and renders community workspace and public feed', async ({ page }) => {
-  // 1. Navigate to your local server
+test('stance app loads and renders street-sign pilot homepage', async ({ page }) => {
   await page.goto('http://localhost:3000');
 
-  // 2. Check that the STANCE branding is visible in the navbar
-  await expect(page.locator('text=STANCE')).toBeVisible();
+  // 1. Check that the STANCE branding and pilot label are visible in the header
+  await expect(page.locator('header').getByText('STANCE', { exact: true })).toBeVisible();
+  await expect(page.locator('header').getByText('Early pilot', { exact: true })).toBeVisible();
 
-  // 3. Verify the workspace badge defaults correctly
-  await expect(page.locator('text=resident workspace')).toBeVisible();
+  // 2. Verify the primary "Report a problem" buttons are present
+  const reportButton = page.locator('button', { hasText: 'Report a problem' }).first();
+  await expect(reportButton).toBeVisible();
 
-  // 4. Verify the "New report" button is present
-  const newReportButton = page.locator('button', { hasText: 'New report' });
-  await expect(newReportButton).toBeVisible();
-
-  // 5. Verify the public record feed heading is rendered
-  await expect(page.locator('text=Reports in your community')).toBeVisible();
+  // 3. Verify the street-sign hero headline and pilot sections render
+  await expect(page.locator('#hero-title')).toHaveText(/Report it\.\s*Get it seen\./i);
+  await expect(page.locator('#steps-title')).toHaveText(/What happens after you report/i);
+  await expect(page.locator('#status-title')).toHaveText(/Where the pilot stands/i);
 });
