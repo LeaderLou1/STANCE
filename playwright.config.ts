@@ -29,6 +29,7 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'] },
     },
   ],
+  // Playwright will automatically start your local dev server for tests
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:3000',

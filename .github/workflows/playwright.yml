@@ -1,4 +1,4 @@
-name: Playwright Tests
+name: STANCE Local CI Pipeline
 
 on:
   push:
@@ -11,11 +11,13 @@ jobs:
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 20
           cache: 'npm'
 
       - name: Install dependencies
@@ -55,10 +57,6 @@ jobs:
       - name: Run Playwright tests
         run: npx playwright test
         env:
-          SUPABASE_TEST_EMAIL: ${{ secrets.SUPABASE_TEST_EMAIL }}
-          SUPABASE_TEST_PASSWORD: ${{ secrets.SUPABASE_TEST_PASSWORD }}
-          TEST_USER_EMAIL: ${{ secrets.SUPABASE_TEST_EMAIL }}
-          TEST_USER_PASSWORD: ${{ secrets.SUPABASE_TEST_PASSWORD }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
