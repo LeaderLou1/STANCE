@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { X, MapPin, Loader2 } from "lucide-react";
+import { X, MapPin, Loader2, Image as ImageIcon } from "lucide-react";
 
 import type {
   AddressSuggestion,
@@ -260,6 +260,62 @@ export function ReportModal({
 
             <p className="mt-1 text-right text-xs text-[#4d5a52]">
               {form.description.length}/2,000
+            </p>
+          </div>
+
+          {/* Attach Photo Field */}
+          <div>
+            <label
+              htmlFor="report-image"
+              className="mb-2 block text-sm font-bold text-[#1b1f1d]"
+              style={{ fontFamily: SANS }}
+            >
+              Attach Photo <span className="text-xs font-normal text-[#4d5a52]">(Optional)</span>
+            </label>
+
+            <div className="flex items-center gap-3">
+              <label 
+                htmlFor="report-image"
+                className="flex min-h-12 flex-1 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-[#1b1f1d]/30 bg-white px-4 py-3 text-sm text-[#1b1f1d]/70 transition hover:border-[#0d5c3f] hover:bg-[#0d5c3f]/5"
+              >
+                <ImageIcon className="h-5 w-5 text-[#0d5c3f]" />
+                <span className="truncate">
+                  {form.imageFile ? form.imageFile.name : "Choose an image file..."}
+                </span>
+              </label>
+
+              <input 
+                id="report-image"
+                type="file" 
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+                  setForm((previous) => ({
+                    ...previous,
+                    imageFile: file,
+                  }));
+                }}
+                className="hidden"
+              />
+
+              {form.imageFile && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((previous) => ({
+                      ...previous,
+                      imageFile: null,
+                    }))
+                  }
+                  className="text-xs font-bold text-red-700 hover:underline"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+
+            <p className="mt-2 text-xs leading-5 text-[#4d5a52]">
+              Upload a clear photo to help local district teams locate and assess the issue faster.
             </p>
           </div>
 

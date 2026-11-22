@@ -22,6 +22,7 @@ export interface ReportForm {
   district_id?: string | null;
   urgency: IssueUrgency;
   media_url: string;
+  imageFile?: File | null; // <--- Added to support local image file selection
 }
 
 export interface AddressSuggestion {
